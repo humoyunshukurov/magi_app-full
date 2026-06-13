@@ -1,0 +1,5 @@
+# Prefer dependency versions compatible with our declared MSRV (rust-version) over the
+# absolute latest. This avoids pulling crates (e.g. time 0.3.48 → rustc 1.88) whose newer
+# transitive combination breaks compilation in this environment.
+[resolver]
+incompatible-rust-versions = "fallback"

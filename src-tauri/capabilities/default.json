@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for the main window (M0). Grants the plugin permissions the app needs; app-defined commands like `ping` are allowed without explicit ACL entries.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "deep-link:default",
+    "os:default",
+    "process:default",
+    "store:default",
+    "fs:default",
+    "http:default"
+  ]
+}

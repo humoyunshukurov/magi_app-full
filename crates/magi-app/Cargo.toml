@@ -1,0 +1,33 @@
+[package]
+name = "magi-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+magi-types = { workspace = true }
+magi-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = "2"
+
+tauri = { version = "2", features = [] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-os = "2"
+tauri-plugin-process = "2"
+tauri-plugin-store = "2"
+tauri-plugin-fs = "2"
+# `default-features = false` drops the `cookies` feature (reqwest cookie store), which
+# pulls `cookie 0.18.1` and conflicts (E0119) with the `time` version tauri requires.
+# We also pin `rustls-tls` over native-tls per ADR-0003/Tech Stack (rustls preferred).
+tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls"] }
+tauri-plugin-window-state = "2"
+tauri-plugin-updater = "2"

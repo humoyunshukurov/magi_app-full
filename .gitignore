@@ -1,0 +1,29 @@
+# Claude Code local workspace
+.claude/
+CLAUDE.local.md
+
+# Rust
+/target
+**/target
+Cargo.lock.orig
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/node_modules/
+*.local
+
+# Tauri
+src-tauri/gen/
+src-tauri/target/
+
+# Generated TS bindings are committed; uncomment to ignore instead
+# frontend/src/generated/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json

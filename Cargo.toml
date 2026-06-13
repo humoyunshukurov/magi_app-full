@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/magi-types",
+    "crates/magi-core",
+    "crates/magi-capture",
+    "crates/magi-enforce",
+    "crates/magi-storage",
+    "crates/magi-sync",
+    "crates/magi-app",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.87"
+license = "LicenseRef-Proprietary"
+authors = ["markhabo labs"]
+repository = ""
+
+[workspace.dependencies]
+# Internal crates
+magi-types = { path = "crates/magi-types" }
+magi-core = { path = "crates/magi-core" }
+magi-capture = { path = "crates/magi-capture" }
+magi-enforce = { path = "crates/magi-enforce" }
+magi-storage = { path = "crates/magi-storage" }
+magi-sync = { path = "crates/magi-sync" }
+magi-app = { path = "crates/magi-app" }
+
+# Shared third-party
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+ts-rs = { version = "10", features = ["uuid-impl"] }
+tokio = { version = "1", features = ["full"] }

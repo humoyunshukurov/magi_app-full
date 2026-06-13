@@ -1,0 +1,36 @@
+[package]
+name = "magi-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "MAGI Desktop App — forensic-grade student client for MAGI University"
+
+[[bin]]
+name = "magi-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+magi-app = { workspace = true }
+tauri = { version = "2", features = [] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# These plugins are registered in `magi-app`, but Tauri's build script discovers plugin
+# *permission* manifests only from the binary crate's direct dependencies (via cargo's
+# `DEP_*` env vars). Declaring them here makes their `*:default` permissions resolvable in
+# `capabilities/`. Keep this list in sync with the plugins registered in `magi-app`.
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-os = "2"
+tauri-plugin-process = "2"
+tauri-plugin-store = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls"] }
+tauri-plugin-window-state = "2"
+tauri-plugin-updater = "2"

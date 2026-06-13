@@ -1,0 +1,7 @@
+[toolchain]
+# Pinned to 1.87.0: the dependency set (tauri 2.x → cookie 0.18 + time 0.3) trips a
+# coherence false-positive (E0119) that became a hard error in rustc 1.88+. 1.87 keeps it a
+# warning. Paired with the MSRV-aware resolver (.cargo/config.toml) which selects
+# 1.87-compatible transitive deps. Revisit when cookie/time publish a compatible combo.
+channel = "1.87.0"
+components = ["rustfmt", "clippy"]

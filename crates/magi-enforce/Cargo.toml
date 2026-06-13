@@ -1,0 +1,21 @@
+[package]
+name = "magi-enforce"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+doctest = false
+
+[features]
+# Platform enforcement is feature-gated (ADR-0002). M0 ships no real enforcement.
+default = []
+level2-proxy = []
+level3-lockdown = []
+
+[dependencies]
+magi-types = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
