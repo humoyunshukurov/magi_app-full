@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { ping, launchPayloadSchema, LAUNCH_EVENT } from "./ipc";
+import { AuthPanel } from "./AuthPanel";
 
 export function App() {
   const [pong, setPong] = useState<string | null>(null);
@@ -72,6 +73,8 @@ export function App() {
             </p>
           )}
         </section>
+
+        <AuthPanel />
       </div>
     </main>
   );

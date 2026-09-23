@@ -18,9 +18,6 @@
     "react-dom": "^18.3.1",
     "zod": "^3.23.8"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
-  },
   "devDependencies": {
     "@testing-library/react": "^16.0.1",
     "@types/react": "^18.3.12",
