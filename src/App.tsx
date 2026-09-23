@@ -37,45 +37,51 @@ export function App() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-8">
-      <div className="w-full max-w-lg space-y-6">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">MAGI Desktop</h1>
-          <p className="text-sm text-slate-400">M0 scaffold · IPC + deep-link smoke test</p>
-        </header>
+    <div className="min-h-screen bg-magi-white text-magi-primary flex flex-col">
+      <header className="sticky top-0 z-50 bg-magi-white border-b border-magi-border">
+        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center">
+          <span className="font-outfit font-extrabold text-lg tracking-tight">MAGI Desktop</span>
+        </div>
+      </header>
 
-        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-slate-400">
-            IPC: ping
-          </h2>
-          {error ? (
-            <p className="mt-2 font-mono text-sm text-red-400">error: {error}</p>
-          ) : pong ? (
-            <p className="mt-2 font-mono text-sm text-emerald-400">
-              {pong} <span className="text-slate-500">(core {coreVersion})</span>
-            </p>
-          ) : (
-            <p className="mt-2 font-mono text-sm text-slate-500">calling…</p>
-          )}
-        </section>
-
-        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-slate-400">
-            Deep link: {LAUNCH_EVENT}
-          </h2>
-          {lastToken ? (
-            <p className="mt-2 font-mono text-sm text-indigo-300">token: {lastToken}</p>
-          ) : (
-            <p className="mt-2 text-sm text-slate-500">
-              Waiting for a <code className="text-slate-400">magi://launch?token=…</code> deep
-              link. Try{" "}
-              <code className="text-slate-400">open &apos;magi://launch?token=stub&apos;</code>.
-            </p>
-          )}
-        </section>
-
+      <main className="flex-grow max-w-5xl w-full mx-auto px-6 py-10 space-y-8">
         <AuthPanel />
-      </div>
-    </main>
+
+        <details className="glass-card p-4 max-w-3xl mx-auto text-xs">
+          <summary className="cursor-pointer font-semibold text-magi-secondary uppercase tracking-wide">
+            Diagnostics: IPC + deep link
+          </summary>
+          <div className="mt-3 space-y-3">
+            <div>
+              <h3 className="font-medium text-magi-secondary">IPC: ping</h3>
+              {error ? (
+                <p className="mt-1 font-mono text-magi-destructive">error: {error}</p>
+              ) : pong ? (
+                <p className="mt-1 font-mono text-magi-success">
+                  {pong} <span className="text-magi-secondary">(core {coreVersion})</span>
+                </p>
+              ) : (
+                <p className="mt-1 font-mono text-magi-secondary">calling…</p>
+              )}
+            </div>
+            <div>
+              <h3 className="font-medium text-magi-secondary">Deep link: {LAUNCH_EVENT}</h3>
+              {lastToken ? (
+                <p className="mt-1 font-mono text-magi-primary">token: {lastToken}</p>
+              ) : (
+                <p className="mt-1 text-magi-secondary">
+                  Waiting for a <code>magi://launch?token=…</code> deep link. Try{" "}
+                  <code>open &apos;magi://launch?token=stub&apos;</code>.
+                </p>
+              )}
+            </div>
+          </div>
+        </details>
+      </main>
+
+      <footer className="bg-magi-white border-t border-magi-border py-6">
+        <p className="text-center text-xs text-magi-secondary font-light">&copy; {new Date().getFullYear()} MAGI</p>
+      </footer>
+    </div>
   );
 }

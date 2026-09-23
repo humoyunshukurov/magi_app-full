@@ -100,9 +100,9 @@ describe("AuthPanel", () => {
 
     render(<AuthPanel />);
 
-    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "s@example.com" } });
-    fireEvent.change(screen.getByPlaceholderText("Password"), { target: { value: "Test1234!" } });
-    fireEvent.click(screen.getByRole("button", { name: "Log in" }));
+    fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "s@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Test1234!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
 
     await screen.findByText(/Test Exam/);
 
@@ -110,10 +110,10 @@ describe("AuthPanel", () => {
     await screen.findByText("Is this a test?");
 
     fireEvent.click(screen.getByRole("button", { name: "Yes" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Yes" }).className).toContain("border-indigo-500"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Yes" }).className).toContain("border-magi-primary"));
 
     fireEvent.click(screen.getByRole("button", { name: "Submit attempt" }));
 
-    await screen.findByText(/graded: score 10, passed true/);
+    await screen.findByText(/Graded: 10 \/ 10 - passed/);
   });
 });
