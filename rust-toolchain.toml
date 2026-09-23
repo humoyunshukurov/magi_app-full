@@ -1,0 +1,8 @@
+[toolchain]
+# The magi_app workspace this was extracted from pins 1.87.0 for a Tauri/cookie/time
+# coherence false-positive (E0119) that's a hard error in 1.88+ - see its own
+# rust-toolchain.toml. This crate has no Tauri or cookie dependency, so that conflict
+# doesn't apply here, and 1.87 is in fact too old: jsonwebtoken -> simple_asn1 needs
+# time >=0.3.47, which requires rustc 1.88+. Stable is already installed on this machine.
+channel = "stable"
+components = ["rustfmt", "clippy"]

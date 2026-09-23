@@ -1,3 +1,7 @@
+# Standalone package, deliberately not a member of the magi_app Cargo workspace it happens
+# to sit under - this empty table is what tells Cargo that.
+[workspace]
+
 [package]
 name = "magi-server"
 version = "0.0.0"
