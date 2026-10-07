@@ -55,8 +55,11 @@ impl FromRequestParts<AppState> for CurrentUser {
 
         let claims = jwt::verify(&raw_token, &state.config.jwt_secret)?;
 
-        if !token_store::is_login_token_valid(&state.pool, &raw_token).await? {
-            return Err(AppError::Unauthorized("Not authorized, invalid or expired token".to_string()));
+        if !state.token_cache.is_fresh(&raw_token) {
+            if !token_store::is_login_token_valid(&state.pool, &raw_token).await? {
+                return Err(AppError::Unauthorized("Not authorized, invalid or expired token".to_string()));
+            }
+            state.token_cache.remember(&raw_token);
         }
 
         Ok(CurrentUser {

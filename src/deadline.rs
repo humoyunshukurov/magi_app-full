@@ -12,7 +12,7 @@ use ts_rs::TS;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize, TS)]
 #[sqlx(type_name = "type_time_unit", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../../../frontend/src/generated/", rename_all = "lowercase")]
+#[ts(export, export_to = "../../frontend/src/generated/", rename_all = "lowercase")]
 pub enum TimeUnit {
     Seconds,
     Minutes,
@@ -21,6 +21,15 @@ pub enum TimeUnit {
 }
 
 impl TimeUnit {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TimeUnit::Seconds => "seconds",
+            TimeUnit::Minutes => "minutes",
+            TimeUnit::Hours => "hours",
+            TimeUnit::Days => "days",
+        }
+    }
+
     pub fn to_seconds(self, value: i32) -> i64 {
         let factor: i64 = match self {
             TimeUnit::Seconds => 1,

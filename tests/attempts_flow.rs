@@ -11,6 +11,8 @@ use chrono::{Duration, Utc};
 use magi_server::attempts::models::{AnswerInput, AttemptStatus};
 use magi_server::attempts::service;
 use magi_server::auth::password;
+use magi_server::error::AppError;
+use magi_server::exams;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
@@ -129,6 +131,14 @@ async fn start_sync_submit_grades_correctly() {
 
         let attempt_id = started.summary.id;
 
+        // starting again while the attempt is open picks the same one up, and the exam list says so
+        let again = service::start_attempt(&pool, fixture.user_id, fixture.exam_id).await?;
+        assert_eq!(again.summary.id, attempt_id);
+        assert_eq!(again.summary.status, AttemptStatus::InProgress);
+        assert_eq!(again.questions.len(), 2);
+        let listed = exams::service::list_exams(&pool, fixture.user_id).await?;
+        assert_eq!(listed.iter().find(|e| e.id == fixture.exam_id).unwrap().attempt_status, Some(AttemptStatus::InProgress));
+
         // answer the first question correctly, the second wrongly (leave it unanswered ->
         // no selected option -> graded wrong, since a question with no chosen option can
         // never match a non-empty correct set)
@@ -151,6 +161,12 @@ async fn start_sync_submit_grades_correctly() {
         assert_eq!(submitted.attempt.status, AttemptStatus::Graded);
         assert_eq!(submitted.attempt.score, Some(5), "one of two 5-mark questions answered correctly");
         assert_eq!(submitted.attempt.passed, Some(true), "5 >= passing_marks (5)");
+
+        // a finished attempt can't be started again, and the list shows where it ended up
+        let refused = service::start_attempt(&pool, fixture.user_id, fixture.exam_id).await;
+        assert!(matches!(refused, Err(AppError::Conflict(_))));
+        let listed = exams::service::list_exams(&pool, fixture.user_id).await?;
+        assert_eq!(listed.iter().find(|e| e.id == fixture.exam_id).unwrap().attempt_status, Some(AttemptStatus::Graded));
 
         Ok::<(), magi_server::error::AppError>(())
     }

@@ -3,10 +3,12 @@
 use sqlx::PgPool;
 
 use crate::access::{self, Timed};
+use crate::config::Config;
 use crate::error::AppError;
 use crate::monitoring::models::MediaRecord;
+use crate::storage;
 
-const MAX_URL: usize = 2048;
+const MAX_LABEL: usize = 200;
 
 /// The four media kinds, each with its own table and the join table carrying the attempt.
 #[derive(Debug, Clone, Copy)]
@@ -26,6 +28,16 @@ impl MediaKind {
             "face-snapshots" => Ok(Self::FaceSnapshots),
             "snapshots" => Ok(Self::Snapshots),
             _ => Err(AppError::NotFound("Media not found".to_string())),
+        }
+    }
+
+    /// The path segment this kind was parsed from, reused as the storage folder name.
+    fn slug(self) -> &'static str {
+        match self {
+            Self::PanoramicViews => "panoramic-views",
+            Self::VideoRecordings => "video-recordings",
+            Self::FaceSnapshots => "face-snapshots",
+            Self::Snapshots => "snapshots",
         }
     }
 
@@ -57,32 +69,32 @@ impl MediaKind {
     }
 }
 
-fn parse_url(value: &str) -> Result<String, AppError> {
-    let url = value.trim();
-    if url.is_empty() {
-        return Err(AppError::BadRequest("url is required".to_string()));
+fn parse_label(value: Option<&str>) -> Result<Option<String>, AppError> {
+    let Some(value) = value else { return Ok(None) };
+    let label = value.trim();
+    if label.is_empty() {
+        return Ok(None);
     }
-    if url.len() > MAX_URL {
-        return Err(AppError::BadRequest(format!("url must be at most {MAX_URL} characters")));
+    if label.len() > MAX_LABEL {
+        return Err(AppError::BadRequest(format!("label must be at most {MAX_LABEL} characters")));
     }
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return Err(AppError::BadRequest("url must be an http or https URL".to_string()));
-    }
-    Ok(url.to_string())
+    Ok(Some(label.to_string()))
 }
 
-/// `POST /api/monitoring/attempts/:attempt_id/:kind`. Both writes (the media row and its
-/// attempt link) happen in one transaction - a real fix for the TS version's manual
-/// "delete the media row again if the link insert fails" compensation, which PostgREST
-/// forced since it cannot span two calls in one transaction.
+/// `POST /api/monitoring/attempts/:attempt_id/:kind`. Uploads the photo to Storage, then both
+/// writes (the media row and its attempt link) happen in one transaction - a real fix for the
+/// TS version's manual "delete the media row again if the link insert fails" compensation,
+/// which PostgREST forced since it cannot span two calls in one transaction.
 pub async fn add_media(
     pool: &PgPool,
+    config: &Config,
     kind: MediaKind,
     attempt_id: i64,
     student_id: i64,
-    url: &str,
+    image: &str,
+    label: Option<&str>,
 ) -> Result<MediaRecord, AppError> {
-    let media_url = parse_url(url)?;
+    let label = parse_label(label)?;
 
     let attempt = access::load_running_attempt(pool, attempt_id).await?;
     if !access::owns_attempt(pool, attempt_id, student_id).await? {
@@ -95,11 +107,14 @@ pub async fn add_media(
         return Err(AppError::Conflict("Time is up: this attempt is over".to_string()));
     }
 
+    let media_url = storage::upload_photo(config, attempt_id, kind.slug(), image).await?;
+
     let mut tx = pool.begin().await?;
     let table = kind.table();
-    let insert_media = format!("insert into public.{table} (url) values ($1) returning id, url, created_at");
-    let (id, url, created_at) = sqlx::query_as::<_, (i64, String, chrono::DateTime<chrono::Utc>)>(&insert_media)
+    let insert_media = format!("insert into public.{table} (url, label) values ($1, $2) returning id, url, label, created_at");
+    let (id, url, label, created_at) = sqlx::query_as::<_, (i64, String, Option<String>, chrono::DateTime<chrono::Utc>)>(&insert_media)
         .bind(&media_url)
+        .bind(&label)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -109,5 +124,5 @@ pub async fn add_media(
     sqlx::query(&insert_link).bind(attempt.id).bind(id).execute(&mut *tx).await?;
 
     tx.commit().await?;
-    Ok(MediaRecord { id, url, created_at })
+    Ok(MediaRecord { id, url, label, created_at })
 }

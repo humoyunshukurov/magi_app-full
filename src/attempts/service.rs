@@ -141,8 +141,14 @@ fn remaining_seconds(attempt: &Attempt, exam: &Exam) -> i64 {
     (deadline_of(attempt, exam) - Utc::now()).num_seconds().max(0)
 }
 
+type ExamRow = (i64, String, DateTime<Utc>, DateTime<Utc>, ExamStatus, i32, i32);
+
+fn exam_from_row(row: ExamRow) -> Exam {
+    Exam { id: row.0, name: row.1, scheduled_start: row.2, scheduled_end: row.3, status: row.4, max_marks: row.5, passing_marks: row.6 }
+}
+
 async fn load_exam(pool: &PgPool, exam_id: i64) -> Result<Exam, AppError> {
-    let row = sqlx::query_as::<_, (i64, String, DateTime<Utc>, DateTime<Utc>, ExamStatus, i32, i32)>(
+    let row = sqlx::query_as::<_, ExamRow>(
         "select id, name, scheduled_start, scheduled_end, status, max_marks, passing_marks \
          from public.exams where id = $1 and deleted_at is null",
     )
@@ -151,7 +157,23 @@ async fn load_exam(pool: &PgPool, exam_id: i64) -> Result<Exam, AppError> {
     .await?
     .ok_or_else(|| AppError::NotFound("Exam not found".to_string()))?;
 
-    Ok(Exam { id: row.0, name: row.1, scheduled_start: row.2, scheduled_end: row.3, status: row.4, max_marks: row.5, passing_marks: row.6 })
+    Ok(exam_from_row(row))
+}
+
+/// The exam of `attempt_id`, but only when `student_id` owns that attempt: the ownership check
+/// and the exam lookup in one round trip.
+async fn owned_exam(pool: &PgPool, attempt_id: i64, student_id: i64) -> Result<Option<Exam>, AppError> {
+    let row = sqlx::query_as::<_, ExamRow>(
+        "select e.id, e.name, e.scheduled_start, e.scheduled_end, e.status, e.max_marks, e.passing_marks \
+         from public.exams e join public.student_assignment sa on sa.exam_id = e.id \
+         where sa.assignment_id = $1 and sa.student_id = $2 and e.deleted_at is null",
+    )
+    .bind(attempt_id)
+    .bind(student_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(row.map(exam_from_row))
 }
 
 async fn load_attempt(pool: &PgPool, attempt_id: i64) -> Result<Attempt, AppError> {
@@ -165,11 +187,8 @@ async fn load_attempt(pool: &PgPool, attempt_id: i64) -> Result<Attempt, AppErro
 }
 
 async fn load_own_attempt(pool: &PgPool, student_id: i64, attempt_id: i64) -> Result<(Attempt, Exam), AppError> {
-    let attempt = load_attempt(pool, attempt_id).await?;
-    if !access::owns_attempt(pool, attempt_id, student_id).await? {
-        return Err(AppError::NotFound("Attempt not found".to_string()));
-    }
-    let exam = load_exam(pool, attempt.exam_id).await?;
+    let (attempt, exam) = tokio::try_join!(load_attempt(pool, attempt_id), owned_exam(pool, attempt_id, student_id))?;
+    let exam = exam.ok_or_else(|| AppError::NotFound("Attempt not found".to_string()))?;
     Ok((attempt, exam))
 }
 
@@ -207,51 +226,41 @@ fn student_summary(attempt: &Attempt, exam: &Exam) -> AttemptSummary {
 }
 
 async fn attempt_questions(pool: &PgPool, attempt: &Attempt) -> Result<Vec<AttemptQuestion>, AppError> {
-    let rows = sqlx::query_as::<_, (i64, i32, String, i32, TimeUnit, i32, i32, i32, Option<DateTime<Utc>>, Option<DateTime<Utc>>, Option<DateTime<Utc>>, i32)>(
-        "select question_id, position, answer, typing_duration, typing_duration_unit, text_typed, text_edited, \
-         text_pasted, last_synced_at, started_at, answered_at, marks_awarded \
-         from public.question_assignment where assignment_id = $1 order by position",
-    )
-    .bind(attempt.id)
-    .fetch_all(pool)
-    .await?;
-    if rows.is_empty() {
-        return Ok(vec![]);
-    }
-
-    let question_ids: Vec<i64> = rows.iter().map(|row| row.0).collect();
-
-    let questions = sqlx::query_as::<_, (i64, String, String, QuestionType, i32, TimeUnit)>(
-        "select id, title, question, question_type, expected_duration, expected_duration_unit \
-         from public.questions where id = any($1) and deleted_at is null",
-    )
-    .bind(&question_ids)
-    .fetch_all(pool)
-    .await?;
-    let questions_by_id: HashMap<i64, _> = questions.into_iter().map(|q| (q.0, q)).collect();
-
-    let options = sqlx::query_as::<_, (i64, i64, String)>(
-        "select id, question_id, option_text from public.question_options \
-         where question_id = any($1) and deleted_at is null order by id",
-    )
-    .bind(&question_ids)
-    .fetch_all(pool)
-    .await?;
-
-    let chosen = sqlx::query_as::<_, (i64, i64)>(
-        "select question_id, option_id from public.question_assignment_option where assignment_id = $1",
-    )
-    .bind(attempt.id)
-    .fetch_all(pool)
-    .await?;
-
-    let marks = sqlx::query_as::<_, (i64, i32)>(
-        "select question_id, marks from public.exam_question where exam_id = $1",
-    )
-    .bind(attempt.exam_id)
-    .fetch_all(pool)
-    .await?;
+    // The database is far away, so every query in a row costs a round trip. All of these hang off
+    // the assignment id, so they go out together.
+    let (rows, chosen, marks, questions, options) = tokio::try_join!(
+        sqlx::query_as::<_, (i64, i32, String, i32, TimeUnit, i32, i32, i32, Option<DateTime<Utc>>, Option<DateTime<Utc>>, Option<DateTime<Utc>>, i32)>(
+            "select question_id, position, answer, typing_duration, typing_duration_unit, text_typed, text_edited, \
+             text_pasted, last_synced_at, started_at, answered_at, marks_awarded \
+             from public.question_assignment where assignment_id = $1 order by position",
+        )
+        .bind(attempt.id)
+        .fetch_all(pool),
+        sqlx::query_as::<_, (i64, i64)>(
+            "select question_id, option_id from public.question_assignment_option where assignment_id = $1",
+        )
+        .bind(attempt.id)
+        .fetch_all(pool),
+        sqlx::query_as::<_, (i64, i32)>("select question_id, marks from public.exam_question where exam_id = $1")
+            .bind(attempt.exam_id)
+            .fetch_all(pool),
+        sqlx::query_as::<_, (i64, String, String, QuestionType, i32, TimeUnit)>(
+            "select q.id, q.title, q.question, q.question_type, q.expected_duration, q.expected_duration_unit \
+             from public.questions q join public.question_assignment qa on qa.question_id = q.id \
+             where qa.assignment_id = $1 and q.deleted_at is null",
+        )
+        .bind(attempt.id)
+        .fetch_all(pool),
+        sqlx::query_as::<_, (i64, i64, String)>(
+            "select o.id, o.question_id, o.option_text from public.question_options o \
+             join public.question_assignment qa on qa.question_id = o.question_id \
+             where qa.assignment_id = $1 and o.deleted_at is null order by o.id",
+        )
+        .bind(attempt.id)
+        .fetch_all(pool),
+    )?;
     let marks_by_question: HashMap<i64, i32> = marks.into_iter().collect();
+    let questions_by_id: HashMap<i64, _> = questions.into_iter().map(|q| (q.0, q)).collect();
 
     let graded = attempt.status == AttemptStatus::Graded;
 
@@ -310,61 +319,41 @@ async fn attempt_permitted_urls(pool: &PgPool, attempt_id: i64) -> Result<Vec<Pe
 /// moves the status on. A flagged attempt keeps its status until a professor grades it (out
 /// of scope this pass), so the flag is never silently lost.
 async fn finish_attempt(pool: &PgPool, attempt: Attempt, exam: &Exam, auto: bool) -> Result<Attempt, AppError> {
-    let mut tx = pool.begin().await?;
-
-    let exam_questions = sqlx::query_as::<_, (i64, i32)>(
-        "select question_id, marks from public.exam_question where exam_id = $1",
-    )
-    .bind(attempt.exam_id)
-    .fetch_all(&mut *tx)
-    .await?;
-    let marks_by_question: HashMap<i64, i32> = exam_questions.iter().copied().collect();
-    let question_ids: Vec<i64> = exam_questions.iter().map(|row| row.0).collect();
-
-    let questions = if question_ids.is_empty() {
-        vec![]
-    } else {
-        sqlx::query_as::<_, (i64, QuestionType)>(
-            "select id, question_type from public.questions where id = any($1) and deleted_at is null",
+    // Grading only needs what is already stored, so the reads go out together...
+    let (questions, correct, chosen) = tokio::try_join!(
+        sqlx::query_as::<_, (i64, i32, QuestionType)>(
+            "select eq.question_id, eq.marks, q.question_type from public.exam_question eq \
+             join public.questions q on q.id = eq.question_id where eq.exam_id = $1 and q.deleted_at is null",
         )
-        .bind(&question_ids)
-        .fetch_all(&mut *tx)
-        .await?
-    };
-    let objective_ids: Vec<i64> = questions.iter().filter(|q| !q.1.is_manual()).map(|q| q.0).collect();
-    let has_manual = questions.iter().any(|q| q.1.is_manual());
-
-    let mut awarded: i32 = 0;
-    if !objective_ids.is_empty() {
-        let correct = sqlx::query_as::<_, (i64, i64)>(
-            "select id, question_id from public.question_options \
-             where question_id = any($1) and is_correct = true and deleted_at is null",
+        .bind(attempt.exam_id)
+        .fetch_all(pool),
+        sqlx::query_as::<_, (i64, i64)>(
+            "select o.id, o.question_id from public.question_options o \
+             join public.exam_question eq on eq.question_id = o.question_id \
+             where eq.exam_id = $1 and o.is_correct = true and o.deleted_at is null",
         )
-        .bind(&objective_ids)
-        .fetch_all(&mut *tx)
-        .await?;
-        let chosen = sqlx::query_as::<_, (i64, i64)>(
+        .bind(attempt.exam_id)
+        .fetch_all(pool),
+        sqlx::query_as::<_, (i64, i64)>(
             "select question_id, option_id from public.question_assignment_option where assignment_id = $1",
         )
         .bind(attempt.id)
-        .fetch_all(&mut *tx)
-        .await?;
+        .fetch_all(pool),
+    )?;
+    let has_manual = questions.iter().any(|q| q.2.is_manual());
 
-        for question_id in &objective_ids {
-            let expected: HashSet<i64> = correct.iter().filter(|c| c.1 == *question_id).map(|c| c.0).collect();
-            let given: HashSet<i64> = chosen.iter().filter(|c| c.0 == *question_id).map(|c| c.1).collect();
-            // all or nothing on the option set; a question without a correct option can never be right
-            let right = !expected.is_empty() && expected == given;
-            let marks = if right { marks_by_question.get(question_id).copied().unwrap_or(0) } else { 0 };
-
-            sqlx::query("update public.question_assignment set marks_awarded = $1 where assignment_id = $2 and question_id = $3")
-                .bind(marks)
-                .bind(attempt.id)
-                .bind(question_id)
-                .execute(&mut *tx)
-                .await?;
-            awarded += marks;
-        }
+    let mut graded_ids: Vec<i64> = Vec::new();
+    let mut graded_marks: Vec<i32> = Vec::new();
+    let mut awarded: i32 = 0;
+    for (question_id, marks, _) in questions.iter().filter(|q| !q.2.is_manual()) {
+        let expected: HashSet<i64> = correct.iter().filter(|c| c.1 == *question_id).map(|c| c.0).collect();
+        let given: HashSet<i64> = chosen.iter().filter(|c| c.0 == *question_id).map(|c| c.1).collect();
+        // all or nothing on the option set; a question without a correct option can never be right
+        let right = !expected.is_empty() && expected == given;
+        let earned = if right { *marks } else { 0 };
+        graded_ids.push(*question_id);
+        graded_marks.push(earned);
+        awarded += earned;
     }
 
     let status = if attempt.status == AttemptStatus::Flagged {
@@ -376,19 +365,28 @@ async fn finish_attempt(pool: &PgPool, attempt: Attempt, exam: &Exam, auto: bool
     };
     let score = awarded.min(exam.max_marks);
 
+    // ...and the marks plus the closing of the attempt are one statement, so they land together
+    // without a transaction's extra round trips.
     let sql = format!(
-        "update public.assignments set submitted_at = now(), auto_submitted = $1, status = $2, score = $3 \
-         where id = $4 returning {ATTEMPT_COLUMNS}"
+        "with awarded as ( \
+             update public.question_assignment qa set marks_awarded = m.marks \
+             from unnest($1::bigint[], $2::int[]) as m(question_id, marks) \
+             where qa.assignment_id = $3::bigint and qa.question_id = m.question_id \
+             returning 1 \
+         ) \
+         update public.assignments set submitted_at = now(), auto_submitted = $4, status = $5, score = $6 \
+         where id = $3::bigint returning {ATTEMPT_COLUMNS}"
     );
     let row = sqlx::query_as::<_, AttemptRow>(&sql)
+        .bind(&graded_ids)
+        .bind(&graded_marks)
+        .bind(attempt.id)
         .bind(auto)
         .bind(status)
         .bind(score)
-        .bind(attempt.id)
-        .fetch_one(&mut *tx)
+        .fetch_one(pool)
         .await?;
 
-    tx.commit().await?;
     Ok(attempt_from_row(row))
 }
 
@@ -408,8 +406,35 @@ const STARTABLE_STATUSES: [ExamStatus; 3] = [ExamStatus::Scheduled, ExamStatus::
 /// the cheap checks (schedule, status, enrolment, one attempt per student) stay here, same
 /// split as the TS `startAttempt`.
 pub async fn start_attempt(pool: &PgPool, student_id: i64, exam_id: i64) -> Result<AttemptDetail, AppError> {
-    let exam = load_exam(pool, exam_id).await?;
-    if !access::sits_exam(pool, exam_id, student_id).await? {
+    // These reads don't depend on each other; the checks below still run in the same order.
+    let (exam, sits, existing, durations) = tokio::try_join!(
+        load_exam(pool, exam_id),
+        access::sits_exam(pool, exam_id, student_id),
+        // one attempt per student per exam is a unique constraint; checking first avoids
+        // creating a row for nothing, same as the TS version
+        async {
+            sqlx::query_scalar::<_, i64>(
+                "select assignment_id from public.student_assignment where student_id = $1 and exam_id = $2",
+            )
+            .bind(student_id)
+            .bind(exam_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(AppError::from)
+        },
+        async {
+            sqlx::query_as::<_, (i32, TimeUnit)>(
+                "select q.expected_duration, q.expected_duration_unit from public.questions q \
+                 join public.exam_question eq on eq.question_id = q.id \
+                 where eq.exam_id = $1 and q.deleted_at is null",
+            )
+            .bind(exam_id)
+            .fetch_all(pool)
+            .await
+            .map_err(AppError::from)
+        },
+    )?;
+    if !sits {
         return Err(AppError::NotFound("Exam not found".to_string()));
     }
     if !STARTABLE_STATUSES.contains(&exam.status) {
@@ -423,43 +448,15 @@ pub async fn start_attempt(pool: &PgPool, student_id: i64, exam_id: i64) -> Resu
     if now >= exam.scheduled_end {
         return Err(AppError::BadRequest("This exam is over".to_string()));
     }
-
-    // one attempt per student per exam is a unique constraint; checking first avoids
-    // creating a row for nothing, same as the TS version
-    let existing = sqlx::query_scalar::<_, i64>(
-        "select assignment_id from public.student_assignment where student_id = $1 and exam_id = $2",
-    )
-    .bind(student_id)
-    .bind(exam_id)
-    .fetch_optional(pool)
-    .await?;
-    if existing.is_some() {
-        return Err(AppError::Conflict("You have already started this exam".to_string()));
+    if let Some(attempt_id) = existing {
+        return resume_attempt(pool, student_id, attempt_id).await;
     }
-
-    let exam_question_ids = sqlx::query_scalar::<_, i64>(
-        "select question_id from public.exam_question where exam_id = $1",
-    )
-    .bind(exam_id)
-    .fetch_all(pool)
-    .await?;
-    let questions = if exam_question_ids.is_empty() {
-        vec![]
-    } else {
-        sqlx::query_as::<_, (i32, TimeUnit)>(
-            "select expected_duration, expected_duration_unit from public.questions \
-             where id = any($1) and deleted_at is null",
-        )
-        .bind(&exam_question_ids)
-        .fetch_all(pool)
-        .await?
-    };
-    if questions.is_empty() {
+    if durations.is_empty() {
         return Err(AppError::BadRequest("This exam has no questions yet".to_string()));
     }
 
     let window_left = (exam.scheduled_end - now).num_seconds().max(0);
-    let expected: i64 = questions.iter().map(|(duration, unit)| unit.to_seconds(*duration)).sum();
+    let expected: i64 = durations.iter().map(|(duration, unit)| unit.to_seconds(*duration)).sum();
     let base = if expected == 0 { window_left } else { expected };
     let session_duration = base.min(window_left);
 
@@ -479,23 +476,76 @@ pub async fn start_attempt(pool: &PgPool, student_id: i64, exam_id: i64) -> Resu
     let row: StartedAttemptRow = serde_json::from_value(created).map_err(|err| AppError::Internal(err.into()))?;
     let attempt = Attempt::from(row);
 
-    Ok(AttemptDetail {
-        summary: student_summary(&attempt, &exam),
-        questions: attempt_questions(pool, &attempt).await?,
-        permitted_urls: attempt_permitted_urls(pool, attempt.id).await?,
+    attempt_detail(pool, &attempt, &exam).await}
+
+/// `GET /api/attempts/my` - every attempt this student has, most recent first. Mirrors the TS
+/// `listMyAttempts`: only attempts that actually exist (started), an exam with no attempt yet
+/// doesn't show up here - that's what `GET /api/exams`'s `attempt_status: None` already covers.
+pub async fn list_my_attempts(pool: &PgPool, student_id: i64) -> Result<Vec<AttemptSummary>, AppError> {
+    let links = sqlx::query_scalar::<_, i64>(
+        "select assignment_id from public.student_assignment where student_id = $1",
+    )
+    .bind(student_id)
+    .fetch_all(pool)
+    .await?;
+    if links.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let sql = format!(
+        "select {ATTEMPT_COLUMNS} from public.assignments where id = any($1) and deleted_at is null order by id desc"
+    );
+    let attempts: Vec<Attempt> = sqlx::query_as::<_, AttemptRow>(&sql)
+        .bind(&links)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(attempt_from_row)
+        .collect();
+    if attempts.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let exam_ids: Vec<i64> = attempts.iter().map(|a| a.exam_id).collect();
+    let exams_by_id: HashMap<i64, Exam> = sqlx::query_as::<_, ExamRow>(
+        "select id, name, scheduled_start, scheduled_end, status, max_marks, passing_marks \
+         from public.exams where id = any($1) and deleted_at is null",
+    )
+    .bind(&exam_ids)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        let exam = exam_from_row(row);
+        (exam.id, exam)
     })
+    .collect();
+
+    Ok(attempts.iter().filter_map(|a| exams_by_id.get(&a.exam_id).map(|exam| student_summary(a, exam))).collect())
 }
 
 /// `GET /api/attempts/:id`.
 pub async fn get_attempt(pool: &PgPool, student_id: i64, attempt_id: i64) -> Result<AttemptDetail, AppError> {
     let (attempt, exam) = load_own_attempt(pool, student_id, attempt_id).await?;
     let current = ensure_current(pool, attempt, &exam).await?;
+    attempt_detail(pool, &current, &exam).await
+}
 
-    Ok(AttemptDetail {
-        summary: student_summary(&current, &exam),
-        questions: attempt_questions(pool, &current).await?,
-        permitted_urls: attempt_permitted_urls(pool, current.id).await?,
-    })
+async fn attempt_detail(pool: &PgPool, attempt: &Attempt, exam: &Exam) -> Result<AttemptDetail, AppError> {
+    let (questions, permitted_urls) =
+        tokio::try_join!(attempt_questions(pool, attempt), attempt_permitted_urls(pool, attempt.id))?;
+    Ok(AttemptDetail { summary: student_summary(attempt, exam), questions, permitted_urls })
+}
+
+/// Starting an exam whose attempt is still open picks that attempt up where it was left (the app
+/// was closed, the connection dropped). A finished attempt can't be started again.
+async fn resume_attempt(pool: &PgPool, student_id: i64, attempt_id: i64) -> Result<AttemptDetail, AppError> {
+    let (attempt, exam) = load_own_attempt(pool, student_id, attempt_id).await?;
+    let current = ensure_current(pool, attempt, &exam).await?;
+    if !is_open(&current) {
+        return Err(AppError::Conflict("You have already completed this exam".to_string()));
+    }
+    attempt_detail(pool, &current, &exam).await
 }
 
 fn require_non_negative(value: i32, field: &str) -> Result<i32, AppError> {
@@ -512,7 +562,32 @@ pub async fn sync_answers(
     attempt_id: i64,
     answers: Vec<AnswerInput>,
 ) -> Result<SyncAnswersResponse, AppError> {
-    let (attempt, exam) = load_own_attempt(pool, student_id, attempt_id).await?;
+    let all_option_ids: Vec<i64> = answers.iter().flat_map(|answer| answer.option_ids.clone().unwrap_or_default()).collect();
+
+    // The database is far away, so these reads go out together; the checks below still run in
+    // the order they would have if the reads had been made one after another.
+    let ((attempt, exam), asked, owners) = tokio::try_join!(
+        load_own_attempt(pool, student_id, attempt_id),
+        async {
+            sqlx::query_scalar::<_, i64>("select question_id from public.question_assignment where assignment_id = $1")
+                .bind(attempt_id)
+                .fetch_all(pool)
+                .await
+                .map_err(AppError::from)
+        },
+        async {
+            if all_option_ids.is_empty() {
+                return Ok(Vec::new());
+            }
+            sqlx::query_as::<_, (i64, i64)>(
+                "select id, question_id from public.question_options where id = any($1) and deleted_at is null",
+            )
+            .bind(&all_option_ids)
+            .fetch_all(pool)
+            .await
+            .map_err(AppError::from)
+        },
+    )?;
     let current = ensure_current(pool, attempt, &exam).await?;
     if !is_open(&current) {
         let message = if current.auto_submitted {
@@ -526,15 +601,7 @@ pub async fn sync_answers(
         return Err(AppError::BadRequest("answers must be a non-empty array".to_string()));
     }
 
-    let asked: HashSet<i64> = sqlx::query_scalar::<_, i64>(
-        "select question_id from public.question_assignment where assignment_id = $1",
-    )
-    .bind(current.id)
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .collect();
-
+    let asked: HashSet<i64> = asked.into_iter().collect();
     for answer in &answers {
         if !asked.contains(&answer.question_id) {
             return Err(AppError::BadRequest(format!("Question {} is not part of this attempt", answer.question_id)));
@@ -554,84 +621,98 @@ pub async fn sync_answers(
     }
 
     // every chosen option has to belong to the question it was sent for
-    let all_option_ids: Vec<i64> = answers.iter().flat_map(|answer| answer.option_ids.clone().unwrap_or_default()).collect();
-    if !all_option_ids.is_empty() {
-        let owners = sqlx::query_as::<_, (i64, i64)>(
-            "select id, question_id from public.question_options where id = any($1) and deleted_at is null",
-        )
-        .bind(&all_option_ids)
-        .fetch_all(pool)
-        .await?;
-        let question_by_option: HashMap<i64, i64> = owners.into_iter().collect();
-
-        for answer in &answers {
-            for option_id in answer.option_ids.iter().flatten() {
-                if question_by_option.get(option_id) != Some(&answer.question_id) {
-                    return Err(AppError::BadRequest(format!(
-                        "Option {option_id} does not belong to question {}",
-                        answer.question_id
-                    )));
-                }
+    let question_by_option: HashMap<i64, i64> = owners.into_iter().collect();
+    for answer in &answers {
+        for option_id in answer.option_ids.iter().flatten() {
+            if question_by_option.get(option_id) != Some(&answer.question_id) {
+                return Err(AppError::BadRequest(format!(
+                    "Option {option_id} does not belong to question {}",
+                    answer.question_id
+                )));
             }
         }
     }
 
-    let mut tx = pool.begin().await?;
     let synced = answers.len();
-    for answer in answers {
-        let mut builder = sqlx::QueryBuilder::new("update public.question_assignment set last_synced_at = now()");
-        if let Some(text) = &answer.answer {
-            builder.push(", answer = ").push_bind(text.clone());
-        }
-        if let Some(value) = answer.typing_duration {
-            builder.push(", typing_duration = ").push_bind(value);
-        }
-        if let Some(unit) = answer.typing_duration_unit {
-            builder.push(", typing_duration_unit = ").push_bind(unit);
-        }
-        if let Some(value) = answer.text_typed {
-            builder.push(", text_typed = ").push_bind(value);
-        }
-        if let Some(value) = answer.text_edited {
-            builder.push(", text_edited = ").push_bind(value);
-        }
-        if let Some(value) = answer.text_pasted {
-            builder.push(", text_pasted = ").push_bind(value);
-        }
-        if let Some(started_at) = answer.started_at {
-            builder.push(", started_at = ").push_bind(started_at);
-        }
-        let answered_at = answer.answered_at.or_else(|| {
-            if answer.answer.is_some() || answer.option_ids.is_some() { Some(Utc::now()) } else { None }
-        });
-        if let Some(answered_at) = answered_at {
-            builder.push(", answered_at = ").push_bind(answered_at);
-        }
-        builder.push(" where assignment_id = ").push_bind(current.id);
-        builder.push(" and question_id = ").push_bind(answer.question_id);
-        builder.build().execute(&mut *tx).await?;
-
-        if let Some(option_ids) = answer.option_ids {
-            sqlx::query("delete from public.question_assignment_option where assignment_id = $1 and question_id = $2")
-                .bind(current.id)
-                .bind(answer.question_id)
-                .execute(&mut *tx)
-                .await?;
-
-            for option_id in option_ids {
-                sqlx::query(
-                    "insert into public.question_assignment_option (assignment_id, question_id, option_id) \
-                     values ($1, $2, $3)",
-                )
-                .bind(current.id)
-                .bind(answer.question_id)
-                .bind(option_id)
-                .execute(&mut *tx)
-                .await?;
-            }
+    let question_ids: Vec<i64> = answers.iter().map(|a| a.question_id).collect();
+    let texts: Vec<Option<String>> = answers.iter().map(|a| a.answer.clone()).collect();
+    let typing: Vec<Option<i32>> = answers.iter().map(|a| a.typing_duration).collect();
+    let units: Vec<Option<String>> = answers.iter().map(|a| a.typing_duration_unit.map(|u| u.as_str().to_string())).collect();
+    let typed: Vec<Option<i32>> = answers.iter().map(|a| a.text_typed).collect();
+    let edited: Vec<Option<i32>> = answers.iter().map(|a| a.text_edited).collect();
+    let pasted: Vec<Option<i32>> = answers.iter().map(|a| a.text_pasted).collect();
+    let started: Vec<Option<DateTime<Utc>>> = answers.iter().map(|a| a.started_at).collect();
+    let answered: Vec<Option<DateTime<Utc>>> = answers.iter().map(|a| a.answered_at).collect();
+    let has_content: Vec<bool> = answers.iter().map(|a| a.answer.is_some() || a.option_ids.is_some()).collect();
+    let mut wanted_questions: Vec<i64> = Vec::new();
+    let mut wanted_options: Vec<i64> = Vec::new();
+    for answer in &answers {
+        for option_id in answer.option_ids.iter().flatten() {
+            wanted_questions.push(answer.question_id);
+            wanted_options.push(*option_id);
         }
     }
-    tx.commit().await?;
+    let touched: Vec<i64> = answers.iter().filter(|a| a.option_ids.is_some()).map(|a| a.question_id).collect();
+
+    // One statement for the whole batch, so it is atomic and costs one round trip however many
+    // questions it carries. Chosen options are brought in line by removing the ones no longer
+    // wanted and adding the missing ones, which keeps the two sub-statements from touching the
+    // same rows.
+    sqlx::query(
+        "with incoming as ( \
+             select v.question_id, v.answer, v.typing_duration, \
+                    v.typing_duration_unit::public.type_time_unit as typing_duration_unit, \
+                    v.text_typed, v.text_edited, v.text_pasted, v.started_at, v.answered_at, v.has_content \
+             from unnest($2::bigint[], $3::text[], $4::int[], $5::text[], $6::int[], $7::int[], $8::int[], \
+                         $9::timestamptz[], $10::timestamptz[], $11::bool[]) \
+                  as v(question_id, answer, typing_duration, typing_duration_unit, text_typed, text_edited, \
+                       text_pasted, started_at, answered_at, has_content) \
+         ), \
+         wanted as ( \
+             select distinct w.question_id, w.option_id from unnest($12::bigint[], $13::bigint[]) as w(question_id, option_id) \
+         ), \
+         removed as ( \
+             delete from public.question_assignment_option o \
+             where o.assignment_id = $1::bigint and o.question_id = any($14::bigint[]) \
+               and not exists (select 1 from wanted w where w.question_id = o.question_id and w.option_id = o.option_id) \
+             returning 1 \
+         ), \
+         added as ( \
+             insert into public.question_assignment_option (assignment_id, question_id, option_id) \
+             select $1::bigint, w.question_id, w.option_id from wanted w \
+             where not exists (select 1 from public.question_assignment_option o \
+                               where o.assignment_id = $1::bigint and o.question_id = w.question_id and o.option_id = w.option_id) \
+             returning 1 \
+         ) \
+         update public.question_assignment qa set \
+             last_synced_at = now(), \
+             answer = coalesce(v.answer, qa.answer), \
+             typing_duration = coalesce(v.typing_duration, qa.typing_duration), \
+             typing_duration_unit = coalesce(v.typing_duration_unit, qa.typing_duration_unit), \
+             text_typed = coalesce(v.text_typed, qa.text_typed), \
+             text_edited = coalesce(v.text_edited, qa.text_edited), \
+             text_pasted = coalesce(v.text_pasted, qa.text_pasted), \
+             started_at = coalesce(v.started_at, qa.started_at), \
+             answered_at = coalesce(v.answered_at, case when v.has_content then now() end, qa.answered_at) \
+         from incoming v \
+         where qa.assignment_id = $1::bigint and qa.question_id = v.question_id",
+    )
+    .bind(current.id)
+    .bind(&question_ids)
+    .bind(&texts)
+    .bind(&typing)
+    .bind(&units)
+    .bind(&typed)
+    .bind(&edited)
+    .bind(&pasted)
+    .bind(&started)
+    .bind(&answered)
+    .bind(&has_content)
+    .bind(&wanted_questions)
+    .bind(&wanted_options)
+    .bind(&touched)
+    .execute(pool)
+    .await?;
 
     Ok(SyncAnswersResponse { synced, remaining_seconds: remaining_seconds(&current, &exam) })
 }

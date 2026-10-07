@@ -3,10 +3,22 @@
 
 use sqlx::PgPool;
 
+use crate::attempts::models::AttemptStatus;
 use crate::error::AppError;
 use crate::exams::models::{ExamDetail, ExamStatus, ExamSummary, PermittedUrl};
 
-type ExamRow = (i64, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, ExamStatus, i32, i32);
+type ExamRow = (i64, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, ExamStatus, i32, i32, Option<AttemptStatus>);
+
+/// The columns of an exam plus the student's attempt at it (if any), as the student sees that
+/// attempt: a flagged one reads as whatever it would be without the flag.
+const EXAM_WITH_ATTEMPT: &str = "select e.id, e.name, e.scheduled_start, e.scheduled_end, e.status, e.max_marks, e.passing_marks, \
+     case when a.status = 'flagged' then \
+         (case when a.submitted_at is null then 'in_progress' when a.auto_submitted then 'auto_submitted' else 'submitted' end)::public.type_assignment_status \
+         else a.status end \
+     from public.exams e \
+     join public.exam_student es on es.exam_id = e.id \
+     left join public.student_assignment sa on sa.exam_id = e.id and sa.student_id = es.student_id \
+     left join public.assignments a on a.id = sa.assignment_id and a.deleted_at is null";
 
 fn to_summary(row: ExamRow) -> ExamSummary {
     ExamSummary {
@@ -17,18 +29,15 @@ fn to_summary(row: ExamRow) -> ExamSummary {
         status: row.4,
         max_marks: row.5,
         passing_marks: row.6,
+        attempt_status: row.7,
     }
 }
 
 /// Exams `student_id` is assigned to sit, live ones only, oldest scheduled first.
 pub async fn list_exams(pool: &PgPool, student_id: i64) -> Result<Vec<ExamSummary>, AppError> {
-    let rows = sqlx::query_as::<_, ExamRow>(
-        "select e.id, e.name, e.scheduled_start, e.scheduled_end, e.status, e.max_marks, e.passing_marks \
-         from public.exams e \
-         join public.exam_student es on es.exam_id = e.id \
-         where es.student_id = $1 and e.deleted_at is null \
-         order by e.scheduled_start",
-    )
+    let rows = sqlx::query_as::<_, ExamRow>(&format!(
+        "{EXAM_WITH_ATTEMPT} where es.student_id = $1 and e.deleted_at is null order by e.scheduled_start"
+    ))
     .bind(student_id)
     .fetch_all(pool)
     .await?;
@@ -53,12 +62,9 @@ async fn permitted_urls(pool: &PgPool, exam_id: i64) -> Result<Vec<PermittedUrl>
 /// One exam as `student_id` may see it - 404 both when it doesn't exist and when the
 /// student isn't assigned to it, so the two are indistinguishable from outside.
 pub async fn get_exam(pool: &PgPool, student_id: i64, exam_id: i64) -> Result<ExamDetail, AppError> {
-    let row = sqlx::query_as::<_, ExamRow>(
-        "select e.id, e.name, e.scheduled_start, e.scheduled_end, e.status, e.max_marks, e.passing_marks \
-         from public.exams e \
-         join public.exam_student es on es.exam_id = e.id \
-         where e.id = $1 and es.student_id = $2 and e.deleted_at is null",
-    )
+    let row = sqlx::query_as::<_, ExamRow>(&format!(
+        "{EXAM_WITH_ATTEMPT} where e.id = $1 and es.student_id = $2 and e.deleted_at is null"
+    ))
     .bind(exam_id)
     .bind(student_id)
     .fetch_optional(pool)

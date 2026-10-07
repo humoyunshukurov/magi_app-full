@@ -14,7 +14,7 @@ use crate::exams::models::{ExamStatus, PermittedUrl};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize, TS)]
 #[sqlx(type_name = "type_assignment_status", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../frontend/src/generated/", rename_all = "snake_case")]
+#[ts(export, export_to = "../../frontend/src/generated/", rename_all = "snake_case")]
 pub enum AttemptStatus {
     Pending,
     InProgress,
@@ -28,7 +28,7 @@ pub enum AttemptStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, Deserialize, TS)]
 #[sqlx(type_name = "type_question_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
-#[ts(export, export_to = "../../../frontend/src/generated/", rename_all = "snake_case")]
+#[ts(export, export_to = "../../frontend/src/generated/", rename_all = "snake_case")]
 pub enum QuestionType {
     MultipleChoice,
     TrueFalse,
@@ -44,7 +44,7 @@ impl QuestionType {
 }
 
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct AttemptExamBrief {
     pub id: i64,
     pub name: String,
@@ -59,7 +59,7 @@ pub struct AttemptExamBrief {
 /// attempt is actually `graded` - never while it's running, submitted, or (internally)
 /// flagged, matching the TS `studentSummary`.
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct AttemptSummary {
     pub id: i64,
     pub exam_id: i64,
@@ -85,7 +85,7 @@ pub struct AttemptSummary {
 }
 
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct AttemptQuestionOption {
     pub id: i64,
     pub option_text: String,
@@ -94,7 +94,7 @@ pub struct AttemptQuestionOption {
 /// One question as it sits in an attempt. Never carries `is_correct` on its options; carries
 /// `marks_awarded` only once the attempt is graded.
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct AttemptQuestion {
     pub question_id: i64,
     pub position: i32,
@@ -121,7 +121,7 @@ pub struct AttemptQuestion {
 }
 
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct AttemptDetail {
     #[serde(flatten)]
     #[ts(flatten)]
@@ -131,13 +131,13 @@ pub struct AttemptDetail {
 }
 
 #[derive(Debug, Deserialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct StartAttemptRequest {
     pub exam_id: i64,
 }
 
 #[derive(Debug, Deserialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct AnswerInput {
     pub question_id: i64,
     pub answer: Option<String>,
@@ -152,20 +152,20 @@ pub struct AnswerInput {
 }
 
 #[derive(Debug, Deserialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct SyncAnswersRequest {
     pub answers: Vec<AnswerInput>,
 }
 
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct SyncAnswersResponse {
     pub synced: usize,
     pub remaining_seconds: i64,
 }
 
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct SubmitResponse {
     pub attempt: AttemptSummary,
     pub message: String,

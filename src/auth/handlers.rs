@@ -170,6 +170,7 @@ pub async fn login(
 /// actually revokes the token row, so a captured bearer token stops working immediately.
 pub async fn logout(State(state): State<AppState>, current: CurrentUser) -> Result<ApiResponse<()>, AppError> {
     token_store::revoke(&state.pool, &current.raw_token, TokenType::CookieTokenLogin).await?;
+    state.token_cache.forget(&current.raw_token);
     Ok(ApiResponse::message("Logged out successfully"))
 }
 

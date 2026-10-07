@@ -6,11 +6,13 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use ts_rs::TS;
 
+use crate::attempts::models::AttemptStatus;
+
 /// `public.type_exam_status`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, Serialize, TS)]
 #[sqlx(type_name = "type_exam_status", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
-#[ts(export, export_to = "../../../frontend/src/generated/", rename_all = "lowercase")]
+#[ts(export, export_to = "../../frontend/src/generated/", rename_all = "lowercase")]
 pub enum ExamStatus {
     Demo,
     Scheduled,
@@ -35,7 +37,7 @@ impl std::fmt::Display for ExamStatus {
 }
 
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct PermittedUrl {
     pub id: i64,
     pub url: String,
@@ -43,7 +45,7 @@ pub struct PermittedUrl {
 
 /// What a student sees in the exam list (`GET /api/exams`).
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct ExamSummary {
     pub id: i64,
     pub name: String,
@@ -52,12 +54,14 @@ pub struct ExamSummary {
     pub status: ExamStatus,
     pub max_marks: i32,
     pub passing_marks: i32,
+    /// Where the student stands with this exam: `None` until they start it.
+    pub attempt_status: Option<AttemptStatus>,
 }
 
 /// What a student sees for one exam (`GET /api/exams/:id`): the summary plus the urls it
 /// permits while sitting.
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct ExamDetail {
     #[serde(flatten)]
     #[ts(flatten)]

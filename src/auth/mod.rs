@@ -7,6 +7,7 @@ pub mod middleware;
 pub mod models;
 pub mod password;
 pub mod routes;
+pub mod token_cache;
 pub mod token_store;
 
 pub use middleware::CurrentUser;

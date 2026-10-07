@@ -18,6 +18,7 @@ pub mod exams;
 pub mod monitoring;
 pub mod response;
 pub mod state;
+pub mod storage;
 
 use axum::Router;
 use tower_http::cors::CorsLayer;

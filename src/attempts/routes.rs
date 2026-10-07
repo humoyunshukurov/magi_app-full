@@ -7,6 +7,7 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", post(handlers::start_attempt))
+        .route("/my", get(handlers::list_my_attempts))
         .route("/:id", get(handlers::get_attempt))
         .route("/:id/answers", put(handlers::sync_answers))
         .route("/:id/submit", post(handlers::submit_attempt))

@@ -17,6 +17,6 @@ pub async fn add_media(
 ) -> Result<ApiResponse<MediaRecord>, AppError> {
     current.require_student()?;
     let kind = MediaKind::parse(&kind)?;
-    let media = service::add_media(&state.pool, kind, attempt_id, current.id, &body.url).await?;
+    let media = service::add_media(&state.pool, &state.config, kind, attempt_id, current.id, &body.image, body.label.as_deref()).await?;
     Ok(ApiResponse::ok(media))
 }

@@ -1,7 +1,7 @@
 use axum::extract::{Path, State};
 use axum::Json;
 
-use crate::attempts::models::{AttemptDetail, StartAttemptRequest, SubmitResponse, SyncAnswersRequest, SyncAnswersResponse};
+use crate::attempts::models::{AttemptDetail, AttemptSummary, StartAttemptRequest, SubmitResponse, SyncAnswersRequest, SyncAnswersResponse};
 use crate::attempts::service;
 use crate::auth::CurrentUser;
 use crate::error::AppError;
@@ -17,6 +17,16 @@ pub async fn start_attempt(
     current.require_student()?;
     let attempt = service::start_attempt(&state.pool, current.id, body.exam_id).await?;
     Ok(ApiResponse::ok(attempt))
+}
+
+/// `GET /api/attempts/my`.
+pub async fn list_my_attempts(
+    State(state): State<AppState>,
+    current: CurrentUser,
+) -> Result<ApiResponse<Vec<AttemptSummary>>, AppError> {
+    current.require_student()?;
+    let attempts = service::list_my_attempts(&state.pool, current.id).await?;
+    Ok(ApiResponse::ok(attempts))
 }
 
 /// `GET /api/attempts/:id`.

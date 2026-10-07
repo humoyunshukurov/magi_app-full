@@ -7,15 +7,19 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 #[derive(Debug, Deserialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct AddMediaRequest {
-    pub url: String,
+    /// A `data:image/...;base64,...` string (or bare base64) - uploaded to Storage server-side.
+    pub image: String,
+    /// What the photo shows, e.g. "ID number 12" or "Phone seen at 05:32".
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Serialize, TS)]
-#[ts(export, export_to = "../../../frontend/src/generated/")]
+#[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct MediaRecord {
     pub id: i64,
     pub url: String,
+    pub label: Option<String>,
     pub created_at: DateTime<Utc>,
 }
