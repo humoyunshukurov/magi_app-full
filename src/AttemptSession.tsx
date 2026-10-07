@@ -4,9 +4,8 @@
 
 import { useEffect, useReducer, useRef, useState } from "react";
 import { AnimatedButton } from "./components/AnimatedButton";
-import { ApiError, getAttempt, submitAttempt, syncAnswers, uploadMedia, type AnswerInput, type AttemptSummary } from "./api";
+import { ApiError, getAttempt, submitAttempt, syncAnswers, uploadMedia, type AnswerInput, type AttemptSummary, type TimeUnit } from "./api";
 import type { AnswerDraft } from "./generated/AnswerDraft";
-import type { TimeUnit } from "./generated/TimeUnit";
 import { draftClear, draftLoad, draftSave } from "./ipc";
 import { logActivity, type ActivityKind } from "./activity";
 import { AnswerSheet } from "./AnswerSheet";

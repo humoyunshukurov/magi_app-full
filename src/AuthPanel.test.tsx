@@ -40,9 +40,9 @@ afterEach(() => {
 const exam = { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
 const loginResponse = {
   status: 200,
-  body: { success: true, data: { token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } },
+  body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } },
 };
-const examsResponse = { status: 200, body: { success: true, data: [exam] } };
+const examsResponse = { status: 200, body: { success: true, exams: [exam] } };
 
 /** Presses Start (or Resume) and goes through the check before the exam. */
 async function begin(name = "Start") {
@@ -64,20 +64,21 @@ describe("AuthPanel", () => {
         status: 200,
         body: {
           success: true,
-          data: { token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } },
+          token: "tok",
+          user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" },
         },
       },
       // GET /api/exams
       {
         status: 200,
-        body: { success: true, data: [{ id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 }] },
+        body: { success: true, exams: [{ id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 }] },
       },
       // POST /api/attempts
       {
         status: 200,
         body: {
           success: true,
-          data: {
+          attempt: {
             id: 28, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
             session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:01:00Z", remaining_seconds: 60,
             exam: { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 },
@@ -93,21 +94,19 @@ describe("AuthPanel", () => {
         },
       },
       // PUT /api/attempts/28/answers (flushed when the attempt is submitted)
-      { status: 200, body: { success: true, data: { synced: 1, remaining_seconds: 55 } } },
+      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55 } },
       // POST /api/attempts/28/submit
       {
         status: 200,
         body: {
           success: true,
-          data: {
-            attempt: {
-              id: 28, exam_id: 15, status: "graded", started_at: null, submitted_at: "2026-01-01T00:00:10Z", auto_submitted: false,
-              session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:01:00Z", remaining_seconds: 0,
-              exam: { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 },
-              score: 10, passed: true,
-            },
-            message: "Your answers have been submitted",
+          attempt: {
+            id: 28, exam_id: 15, status: "graded", started_at: null, submitted_at: "2026-01-01T00:00:10Z", auto_submitted: false,
+            session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:01:00Z", remaining_seconds: 0,
+            exam: { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 },
+            score: 10, passed: true,
           },
+          message: "Your answers have been submitted",
         },
       },
     ]);
@@ -174,11 +173,11 @@ describe("AuthPanel", () => {
     queueFetch([
       loginResponse,
       examsResponse,
-      { status: 200, body: { success: true, data: attempt } },
-      { status: 200, body: { success: true, data: { synced: 1, remaining_seconds: 55 } } },
+      { status: 200, body: { success: true, attempt } },
+      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55 } },
       {
         status: 200,
-        body: { success: true, data: { attempt: { ...attempt, status: "submitted", submitted_at: "2026-01-01T00:00:10Z", remaining_seconds: 0 }, message: "Your answers have been submitted" } },
+        body: { success: true, attempt: { ...attempt, status: "submitted", submitted_at: "2026-01-01T00:00:10Z", remaining_seconds: 0 }, message: "Your answers have been submitted" },
       },
     ]);
 
@@ -197,7 +196,7 @@ describe("AuthPanel", () => {
   describe("exam list states", () => {
     const listWith = (attempt_status: string | null) => ({
       status: 200,
-      body: { success: true, data: [{ ...exam, attempt_status }] },
+      body: { success: true, exams: [{ ...exam, attempt_status }] },
     });
 
     it("shows Start for an exam that was never opened", async () => {
@@ -252,7 +251,7 @@ describe("AuthPanel", () => {
     });
 
     it("fetches the list again when Reload is pressed, so a newly assigned exam shows up", async () => {
-      queueFetch([loginResponse, listWith(null), { status: 200, body: { success: true, data: [exam, { ...exam, id: 16, name: "Second Exam" }] } }]);
+      queueFetch([loginResponse, listWith(null), { status: 200, body: { success: true, exams: [exam, { ...exam, id: 16, name: "Second Exam" }] } }]);
       render(<AuthPanel />);
       signIn();
       await screen.findByText(/Test Exam/);

@@ -3,9 +3,8 @@
 
 import { z } from "zod";
 import type { ActivityEvent } from "./generated/ActivityEvent";
-import type { CheatingType } from "./generated/CheatingType";
 import { activityLog } from "./ipc";
-import { reportCheating, uploadMedia } from "./api";
+import { reportCheating, uploadMedia, type CheatingType } from "./api";
 
 export type ActivityKind =
   | "attempt_started"

@@ -13,10 +13,11 @@ afterEach(() => {
 });
 
 describe("api client envelope handling", () => {
-  it("unwraps data on a successful login response", async () => {
+  it("unwraps the login response", async () => {
     mockFetchOnce(200, {
       success: true,
-      data: { token: "abc", user: { id: 1, first_name: "A", last_name: null, email: "a@b.com", role: "student" } },
+      token: "abc",
+      user: { id: 1, first_name: "A", last_name: null, email: "a@b.com", role: "student" },
     });
     const result = await login("a@b.com", "pw");
     expect(result.token).toBe("abc");
@@ -49,7 +50,7 @@ describe("api client envelope handling", () => {
   it("parses ids as numbers, not bigint, since that's what's actually on the wire", async () => {
     mockFetchOnce(200, {
       success: true,
-      data: [{ id: 9007199254740991, name: "E", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 100, passing_marks: 50 }],
+      exams: [{ id: 9007199254740991, name: "E", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 100, passing_marks: 50 }],
     });
     const exams = await listExams("token");
     expect(typeof exams[0]?.id).toBe("number");

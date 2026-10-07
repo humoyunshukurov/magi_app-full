@@ -37,8 +37,8 @@ afterEach(() => {
 describe("App navigation", () => {
   it("offers Exams and Grades only while signed in", async () => {
     queueFetch([
-      { status: 200, body: { success: true, data: { token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } } },
-      { status: 200, body: { success: true, data: [] } },
+      { status: 200, body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } },
+      { status: 200, body: { success: true, exams: [] } },
       { status: 200, body: { success: true, message: "Logged out" } },
     ]);
 
@@ -74,11 +74,11 @@ describe("App navigation", () => {
       permitted_urls: [],
     };
     queueFetch([
-      { status: 200, body: { success: true, data: { token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } } },
-      { status: 200, body: { success: true, data: [exam] } },
-      { status: 200, body: { success: true, data: attempt } },
-      { status: 200, body: { success: true, data: { synced: 1, remaining_seconds: 55 } } },
-      { status: 200, body: { success: true, data: { attempt: { ...attempt, status: "submitted", submitted_at: "2026-01-01T00:00:10Z", remaining_seconds: 0 }, message: "ok" } } },
+      { status: 200, body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } },
+      { status: 200, body: { success: true, exams: [exam] } },
+      { status: 200, body: { success: true, attempt } },
+      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55 } },
+      { status: 200, body: { success: true, attempt: { ...attempt, status: "submitted", submitted_at: "2026-01-01T00:00:10Z", remaining_seconds: 0 }, message: "ok" } },
     ]);
 
     render(<App />);
@@ -108,9 +108,9 @@ describe("App navigation", () => {
       score: 8, passed: true, feedback: "Clear and well argued.",
     };
     queueFetch([
-      { status: 200, body: { success: true, data: { token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } } },
-      { status: 200, body: { success: true, data: [exam] } },
-      { status: 200, body: { success: true, data: [gradedAttempt] } },
+      { status: 200, body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } },
+      { status: 200, body: { success: true, exams: [exam] } },
+      { status: 200, body: { success: true, attempts: [gradedAttempt] } },
     ]);
 
     render(<App />);

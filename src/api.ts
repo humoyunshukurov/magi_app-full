@@ -1,25 +1,16 @@
-// Typed client for magi-server (ADR-0004: REST + bearer auth), same ADR-0002 pattern as
-// `ipc.ts` - every response is validated at runtime with zod, pinned to the ts-rs-generated
-// type via `satisfies` wherever that type is actually correct for what's on the wire.
+// Typed client for magi-backend (the same Node API magi-admin and magi-frontend use) over
+// bearer auth: the desktop app can't rely on a browser's cookie jar the way the web apps do,
+// so login also returns the session token in the body and every request after that sends
+// `Authorization: Bearer <token>` - magi-backend's protectRoute accepts either.
 //
-// One place that pattern breaks: ts-rs maps Rust's `i64` (every id, `remaining_seconds`, …)
-// to TS `bigint`, but serde_json serializes it as a plain JSON number, not a bigint literal.
-// `z.bigint()` would reject every real response, so ids are `z.number()` here and the
-// `satisfies` check is dropped for the types that carries one - the schema below is what
-// actually arrives, not what the generated `.ts` file claims.
+// magi-backend's envelope is resource-keyed (`{success, exam}`, `{success, exams}`, …), not a
+// uniform `{success, data}` - each function below declares the literal shape its endpoint
+// actually returns and unwraps it, so every caller elsewhere in the app still just gets the
+// plain value it asks for.
 
 import { z } from "zod";
-import type { ExamStatus } from "./generated/ExamStatus";
-import type { AttemptStatus } from "./generated/AttemptStatus";
-import type { TimeUnit } from "./generated/TimeUnit";
-import type { QuestionType } from "./generated/QuestionType";
-import type { CheatingType } from "./generated/CheatingType";
 
-const BASE_URL = import.meta.env.VITE_MAGI_SERVER_URL ?? "http://localhost:8081";
-
-function apiResponseSchema<T extends z.ZodTypeAny>(data: T) {
-  return z.object({ success: z.boolean(), data: data.optional(), message: z.string().optional() });
-}
+const BASE_URL = import.meta.env.VITE_MAGI_BACKEND_URL ?? "http://localhost:8000";
 
 /**
  * Thrown for both network failures and `{success: false}` responses - `kind` tells them apart:
@@ -35,42 +26,35 @@ export class ApiError extends Error {
   }
 }
 
-async function fetchEnvelope<T>(
-  path: string,
-  schema: z.ZodType<T>,
-  init: RequestInit | undefined,
-  token: string | undefined,
-): Promise<{ success: boolean; data?: T; message?: string }> {
+const failureSchema = z.object({ success: z.literal(false), message: z.string().optional() });
+
+/** Fetches, then validates the whole response body against `schema` (the literal envelope shape). */
+async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit, token?: string): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const res = await fetch(`${BASE_URL}${path}`, { ...init, headers }).catch((err: unknown) => {
-    throw new ApiError(`Could not reach magi-server at ${BASE_URL}: ${String(err)}`, "network");
+    throw new ApiError(`Could not reach the server at ${BASE_URL}: ${String(err)}`, "network");
   });
   const json: unknown = await res.json().catch(() => null);
-  const parsed = apiResponseSchema(schema).safeParse(json);
+
+  const failed = failureSchema.safeParse(json);
+  if (failed.success) {
+    throw new ApiError(failed.data.message ?? `Request to ${path} failed`, "response");
+  }
+
+  const parsed = schema.safeParse(json);
   if (!parsed.success) {
     throw new ApiError(`Unexpected response shape from ${path}: ${parsed.error.message}`, "response");
   }
   return parsed.data;
 }
 
-/** For endpoints that answer their payload in `data` on success. */
-async function requestData<T>(path: string, schema: z.ZodType<T>, init?: RequestInit, token?: string): Promise<T> {
-  const envelope = await fetchEnvelope(path, schema, init, token);
-  if (!envelope.success || envelope.data === undefined) {
-    throw new ApiError(envelope.message ?? `Request to ${path} failed`, "response");
-  }
-  return envelope.data;
-}
-
 /** For endpoints that only ever answer `{success, message}` on success - signup, logout, … */
 async function requestMessage(path: string, init?: RequestInit, token?: string): Promise<string> {
-  const envelope = await fetchEnvelope(path, z.never().optional(), init, token);
-  if (!envelope.success) {
-    throw new ApiError(envelope.message ?? `Request to ${path} failed`, "response");
-  }
+  const schema = z.object({ success: z.literal(true), message: z.string().optional() });
+  const envelope = await request(path, schema, init, token);
   return envelope.message ?? "";
 }
 
@@ -83,29 +67,48 @@ const userSummarySchema = z.object({
 });
 export type UserSummary = z.infer<typeof userSummarySchema>;
 
-const loginResponseSchema = z.object({ token: z.string(), user: userSummarySchema });
-
 export async function signup(body: { first_name: string; last_name?: string; email: string; password: string }) {
-  return requestMessage("/api/auth/signup", { method: "POST", body: JSON.stringify(body) });
+  return requestMessage("/api/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({
+      firstName: body.first_name,
+      lastName: body.last_name,
+      email: body.email,
+      password: body.password,
+      role: "student",
+    }),
+  });
 }
 
+const loginEnvelopeSchema = z.object({
+  success: z.literal(true),
+  token: z.string(),
+  user: userSummarySchema,
+});
+
 export async function login(email: string, password: string) {
-  return requestData("/api/auth/login", loginResponseSchema, { method: "POST", body: JSON.stringify({ email, password }) });
+  const envelope = await request("/api/auth/login", loginEnvelopeSchema, {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  return { token: envelope.token, user: envelope.user };
 }
 
 export async function logout(token: string) {
   return requestMessage("/api/auth/logout", { method: "POST" }, token);
 }
 
+// no envelope at all here - get-user answers the decoded token payload directly
+const getUserSchema = userSummarySchema.extend({ iat: z.number().optional(), exp: z.number().optional() });
+
 export async function me(token: string) {
-  return requestData("/api/auth/me", userSummarySchema, { method: "GET" }, token);
+  const user = await request("/api/auth/get-user", getUserSchema, { method: "GET" }, token);
+  return { id: user.id, first_name: user.first_name, last_name: user.last_name, email: user.email, role: user.role };
 }
 
-const examStatusSchema = z.enum(["demo", "scheduled", "ongoing", "completed", "delayed", "cancelled"]) satisfies z.ZodType<ExamStatus>;
-
+const examStatusSchema = z.enum(["demo", "scheduled", "ongoing", "completed", "delayed", "cancelled"]);
 const permittedUrlSchema = z.object({ id: z.number(), url: z.string() });
-
-const attemptStatusSchema = z.enum(["pending", "in_progress", "submitted", "auto_submitted", "graded", "flagged"]) satisfies z.ZodType<AttemptStatus>;
+const attemptStatusSchema = z.enum(["pending", "in_progress", "submitted", "auto_submitted", "graded", "flagged"]);
 
 const examSummarySchema = z.object({
   id: z.number(),
@@ -122,15 +125,17 @@ export type ExamSummary = z.infer<typeof examSummarySchema>;
 const examDetailSchema = examSummarySchema.extend({ permitted_urls: z.array(permittedUrlSchema) });
 
 export async function listExams(token: string) {
-  return requestData("/api/exams", z.array(examSummarySchema), { method: "GET" }, token);
+  const envelope = await request("/api/exams", z.object({ success: z.literal(true), exams: z.array(examSummarySchema) }), { method: "GET" }, token);
+  return envelope.exams;
 }
 
 export async function getExam(token: string, examId: number) {
-  return requestData(`/api/exams/${examId}`, examDetailSchema, { method: "GET" }, token);
+  const envelope = await request(`/api/exams/${examId}`, z.object({ success: z.literal(true), exam: examDetailSchema }), { method: "GET" }, token);
+  return envelope.exam;
 }
 
-const timeUnitSchema = z.enum(["seconds", "minutes", "hours", "days"]) satisfies z.ZodType<TimeUnit>;
-const questionTypeSchema = z.enum(["multiple_choice", "true_false", "short_answer", "essay"]) satisfies z.ZodType<QuestionType>;
+const timeUnitSchema = z.enum(["seconds", "minutes", "hours", "days"]);
+const questionTypeSchema = z.enum(["multiple_choice", "true_false", "short_answer", "essay"]);
 
 const attemptExamBriefSchema = z.object({
   id: z.number(),
@@ -191,16 +196,34 @@ const attemptDetailSchema = attemptSummarySchema.extend({
 });
 
 export async function startAttempt(token: string, examId: number) {
-  return requestData("/api/attempts", attemptDetailSchema, { method: "POST", body: JSON.stringify({ exam_id: examId }) }, token);
+  const envelope = await request(
+    "/api/assignments",
+    z.object({ success: z.literal(true), attempt: attemptDetailSchema }),
+    { method: "POST", body: JSON.stringify({ examId }) },
+    token,
+  );
+  return envelope.attempt;
 }
 
 /** Every attempt this student has, most recent first - including graded ones with their score/feedback. */
 export async function listMyAttempts(token: string) {
-  return requestData("/api/attempts/my", z.array(attemptSummarySchema), { method: "GET" }, token);
+  const envelope = await request(
+    "/api/assignments/my",
+    z.object({ success: z.literal(true), attempts: z.array(attemptSummarySchema) }),
+    { method: "GET" },
+    token,
+  );
+  return envelope.attempts;
 }
 
 export async function getAttempt(token: string, attemptId: number) {
-  return requestData(`/api/attempts/${attemptId}`, attemptDetailSchema, { method: "GET" }, token);
+  const envelope = await request(
+    `/api/assignments/${attemptId}`,
+    z.object({ success: z.literal(true), attempt: attemptDetailSchema }),
+    { method: "GET" },
+    token,
+  );
+  return envelope.attempt;
 }
 
 export interface AnswerInput {
@@ -215,34 +238,70 @@ export interface AnswerInput {
   started_at?: string;
   answered_at?: string;
 }
-
-const syncAnswersResponseSchema = z.object({ synced: z.number(), remaining_seconds: z.number() });
+export type TimeUnit = z.infer<typeof timeUnitSchema>;
 
 export async function syncAnswers(token: string, attemptId: number, answers: AnswerInput[]) {
-  return requestData(
-    `/api/attempts/${attemptId}/answers`,
-    syncAnswersResponseSchema,
-    { method: "PUT", body: JSON.stringify({ answers }) },
+  const body = {
+    answers: answers.map((a) => ({
+      questionId: a.question_id,
+      answer: a.answer,
+      optionIds: a.option_ids,
+      typingDuration: a.typing_duration,
+      typingDurationUnit: a.typing_duration_unit,
+      textTyped: a.text_typed,
+      textEdited: a.text_edited,
+      textPasted: a.text_pasted,
+      startedAt: a.started_at,
+      answeredAt: a.answered_at,
+    })),
+  };
+  const envelope = await request(
+    `/api/assignments/${attemptId}/answers`,
+    z.object({ success: z.literal(true), synced: z.number(), remaining_seconds: z.number() }),
+    { method: "PUT", body: JSON.stringify(body) },
     token,
   );
+  return { synced: envelope.synced, remaining_seconds: envelope.remaining_seconds };
 }
-
-const submitResponseSchema = z.object({ attempt: attemptSummarySchema, message: z.string() });
 
 export async function submitAttempt(token: string, attemptId: number) {
-  return requestData(`/api/attempts/${attemptId}/submit`, submitResponseSchema, { method: "POST" }, token);
+  const envelope = await request(
+    `/api/assignments/${attemptId}/submit`,
+    z.object({ success: z.literal(true), attempt: attemptSummarySchema, message: z.string() }),
+    { method: "POST" },
+    token,
+  );
+  return { attempt: envelope.attempt, message: envelope.message };
 }
 
-const cheatingRecordSchema = z.object({ id: z.number(), name: z.string(), explanation: z.string(), created_at: z.string() });
+const cheatingTypeSchema = z.enum([
+  "tab_switch_limit",
+  "copy_paste",
+  "devtools",
+  "multiple_monitors",
+  "face_mismatch",
+  "screen_share",
+  "unauthorized_app",
+  "manual_review",
+  "phone_seen",
+  "camera_away",
+  "link_blocked",
+  "app_closed",
+]);
+export type CheatingType = z.infer<typeof cheatingTypeSchema>;
 
 /** Records an auto-detected incident server-side, so staff can see it on the attempt without the student's own machine. */
 export async function reportCheating(token: string, attemptId: number, name: CheatingType, explanation: string) {
-  return requestData(
+  const envelope = await request(
     `/api/cheatings/attempts/${attemptId}`,
-    cheatingRecordSchema,
+    z.object({
+      success: z.literal(true),
+      cheating: z.object({ id: z.number(), name: z.string(), explanation: z.string(), created_at: z.string() }),
+    }),
     { method: "POST", body: JSON.stringify({ name, explanation }) },
     token,
   );
+  return envelope.cheating;
 }
 
 export type MonitoringKind = "panoramic-views" | "video-recordings" | "face-snapshots" | "snapshots";
@@ -250,10 +309,11 @@ const mediaRecordSchema = z.object({ id: z.number(), url: z.string(), label: z.s
 
 /** Uploads one photo (a `data:image/jpeg;base64,...` string) so staff can see it without the student's own machine. */
 export async function uploadMedia(token: string, attemptId: number, kind: MonitoringKind, image: string, label?: string) {
-  return requestData(
+  const envelope = await request(
     `/api/monitoring/attempts/${attemptId}/${kind}`,
-    mediaRecordSchema,
+    z.object({ success: z.literal(true), media: mediaRecordSchema }),
     { method: "POST", body: JSON.stringify({ image, label }) },
     token,
   );
+  return envelope.media;
 }
