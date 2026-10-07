@@ -175,7 +175,7 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
       {mode === "login" && (
         <div className="mb-4 p-3 rounded-lg bg-magi-surface border border-dashed border-magi-border">
           <p className="text-xs font-semibold text-magi-primary">Test account</p>
-          <p className="text-xs text-magi-secondary font-mono mt-0.5">humoyun@test.com / Test1234!</p>
+          <p className="text-xs text-magi-secondary font-mono mt-0.5">humoyun@test.com / 123456</p>
         </div>
       )}
 

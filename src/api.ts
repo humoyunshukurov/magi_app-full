@@ -9,6 +9,10 @@
 // plain value it asks for.
 
 import { z } from "zod";
+// the webview's own fetch is subject to the page's CSP/origin like any browser and can't reach
+// an http:// API from a tauri:// page; this plugin makes the request from Rust instead, so there's
+// no Origin header or cross-origin restriction at all - matching the bearer-auth design below.
+import { fetch } from "@tauri-apps/plugin-http";
 
 const BASE_URL = import.meta.env.VITE_MAGI_BACKEND_URL ?? "http://localhost:8000";
 
