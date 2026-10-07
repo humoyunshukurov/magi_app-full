@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 .env.local
+public/mediapipe/wasm/
+vite.config.ts.timestamp-*.mjs
