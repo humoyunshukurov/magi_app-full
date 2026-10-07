@@ -232,6 +232,28 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
 
 const doneChip = "px-2.5 py-1 rounded-lg border border-magi-border bg-magi-white text-[10px] font-bold text-magi-secondary";
 
+function formatCountdown(ms: number): string {
+  const totalMinutes = Math.max(1, Math.ceil(ms / 60000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `Starts in ${days}d ${hours}h`;
+  if (hours > 0) return `Starts in ${hours}h ${minutes}m`;
+  return `Starts in ${minutes}m`;
+}
+
+// Re-renders every 30s so the countdown stays roughly live without a timer per visible digit.
+function StartsIn({ scheduledStart }: { scheduledStart: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const diff = new Date(scheduledStart).getTime() - now;
+  if (diff <= 0) return null;
+  return <p className="text-magi-secondary text-[11px] font-mono mt-0.5">{formatCountdown(diff)}</p>;
+}
+
 function ExamAction({
   exam,
   startingId,
@@ -278,6 +300,7 @@ function ExamList({
           <div>
             <h3 className="text-sm font-bold text-magi-primary">{exam.name}</h3>
             <p className="text-magi-secondary text-xs font-light mt-1 uppercase tracking-wide">{exam.status}</p>
+            {!exam.attempt_status && <StartsIn scheduledStart={exam.scheduled_start} />}
           </div>
           <div className="mt-4 pt-3 border-t border-magi-border flex justify-between items-center text-xs">
             <span className="text-magi-secondary">{exam.max_marks} marks, pass at {exam.passing_marks}</span>
