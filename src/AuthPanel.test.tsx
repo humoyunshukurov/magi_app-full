@@ -327,6 +327,45 @@ describe("AuthPanel", () => {
       expect(globalThis.fetch).toHaveBeenCalledTimes(2); // login and the exam list: no attempt yet
     });
 
+    it("hides Log out once the check starts, and keeps it hidden through the running attempt", async () => {
+      queueFetch([
+        loginResponse,
+        examsResponse,
+        {
+          status: 200,
+          body: {
+            success: true,
+            attempt: {
+              id: 28, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
+              session_duration: 60, session_duration_unit: "seconds", expires_at: "2099-01-01T00:01:00Z", remaining_seconds: 60, exam,
+              questions: [{
+                question_id: 26, position: 1, title: "Q1", question: "Is this a test?", question_type: "multiple_choice",
+                expected_duration: 60, expected_duration_unit: "seconds", marks: 10,
+                options: [{ id: 51, option_text: "Yes" }, { id: 52, option_text: "No" }],
+                answer: "", selected_option_ids: [], typing_duration: 0, typing_duration_unit: "seconds",
+                text_typed: 0, text_edited: 0, text_pasted: 0, started_at: null, answered_at: null, last_synced_at: null,
+              }],
+              permitted_urls: [],
+            },
+          },
+        },
+      ]);
+      render(<AuthPanel />);
+      signIn();
+      await screen.findByText(/Test Exam/);
+      expect(screen.getByRole("button", { name: "Log out" })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
+      await screen.findByText("photos: true");
+      // a click here would silently end a locked, full-screen attempt with none of the
+      // violation logging that actually leaving the window gets - it must not be reachable
+      expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Begin" }));
+      await screen.findByText("Is this a test?");
+      expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
+    });
+
     it("goes back to the exam list when the check is cancelled", async () => {
       queueFetch([loginResponse, examsResponse]);
       render(<AuthPanel />);
@@ -337,6 +376,7 @@ describe("AuthPanel", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Cancel check" }));
 
       expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Log out" })).toBeTruthy();
       expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     });
   });

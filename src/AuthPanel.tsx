@@ -489,9 +489,14 @@ export function AuthPanel({
           </h2>
           <p className="text-xs text-magi-secondary">{session.user.email}</p>
         </div>
-        <button onClick={() => void onLogout()} className="text-sm text-magi-secondary hover:text-magi-primary transition-colors">
-          Log out
-        </button>
+        {/* Hidden once the exam is locked - a click here would silently end the attempt with
+            none of the violation logging that leaving the window or closing the app gets,
+            defeating the whole "you can't get out of this" warning the student was just shown. */}
+        {!checking && !attempt && (
+          <button onClick={() => void onLogout()} className="text-sm text-magi-secondary hover:text-magi-primary transition-colors">
+            Log out
+          </button>
+        )}
       </div>
 
       {error && <ErrorBanner message={error} />}
