@@ -3,6 +3,7 @@
 // camera takes one photo of them with their ID card. The exam clock only starts after this.
 
 import { useEffect, useRef, useState } from "react";
+import { checkIdentity } from "./api";
 import type { EnvironmentReport } from "./generated/EnvironmentReport";
 import { environmentCheck, screenshotTake } from "./ipc";
 import { inputClass, primaryButtonClass } from "./ui";
@@ -14,7 +15,7 @@ export interface CheckIn {
   /** The photo of the student with their ID card; null without a camera. */
   photo: string | null;
   /** Things worth writing in the log that happened during the check-in. */
-  notes: Array<{ kind: "camera_failed" | "screenshot_failed"; detail: string }>;
+  notes: Array<{ kind: "camera_failed" | "screenshot_failed" | "identity_check_failed"; detail: string }>;
 }
 
 export const RECHECK_MS = 3000;
@@ -103,7 +104,7 @@ function Environment({ onPassed, onCancel }: { onPassed: () => void; onCancel: (
   );
 }
 
-function Identity({ onReady, onCancel }: { onReady: (checkIn: CheckIn) => void; onCancel: () => void }) {
+function Identity({ token, onReady, onCancel }: { token: string; onReady: (checkIn: CheckIn) => void; onCancel: () => void }) {
   const notes = useRef<CheckIn["notes"]>([]);
   const camera = useCamera((kind, detail) => {
     if (kind === "camera_failed") notes.current.push({ kind, detail });
@@ -111,6 +112,8 @@ function Identity({ onReady, onCancel }: { onReady: (checkIn: CheckIn) => void; 
   const [idNumber, setIdNumber] = useState("");
   const [notReady, setNotReady] = useState(false);
   const [screenChecked, setScreenChecked] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [mismatch, setMismatch] = useState(false);
 
   // While the student types, the screen is tried once and the picture thrown away: on some systems
   // the computer asks for permission to take screenshots, which is better settled now than in the
@@ -130,11 +133,29 @@ function Identity({ onReady, onCancel }: { onReady: (checkIn: CheckIn) => void; 
   }, []);
 
   const id = idNumber.trim();
-  const start = () => {
+  // The reference photo check only runs when a photo was actually captured - no camera means
+  // nothing to compare, and that path already proceeds (and is logged) on its own above.
+  const start = async () => {
     if (camera.problem) return onReady({ idNumber: id, photo: null, notes: notes.current });
     const photo = camera.grab();
     setNotReady(photo === null);
-    if (photo) onReady({ idNumber: id, photo, notes: notes.current });
+    if (!photo) return;
+
+    setMismatch(false);
+    setVerifying(true);
+    let matched = true;
+    try {
+      const check = await checkIdentity(token, photo);
+      matched = !check.hasReference || check.matched;
+    } catch (err) {
+      // a broken check must not lock a student out of an exam they're entitled to take - let
+      // them in, but note it so staff can see the identity check never actually ran
+      notes.current.push({ kind: "identity_check_failed", detail: `Could not verify your photo: ${String(err)}` });
+    }
+    setVerifying(false);
+
+    if (!matched) return setMismatch(true);
+    onReady({ idNumber: id, photo, notes: notes.current });
   };
   const ready = camera.problem !== null || camera.source !== null;
 
@@ -160,13 +181,19 @@ function Identity({ onReady, onCancel }: { onReady: (checkIn: CheckIn) => void; 
           <input id="id-number" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} autoComplete="off" className={inputClass} />
         </div>
         {notReady && <p className="text-xs text-magi-destructive">The camera picture isn't ready yet, try again in a moment.</p>}
+        {mismatch && (
+          <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">
+            <p className="text-sm font-bold text-magi-destructive">This doesn&apos;t look like you</p>
+            <p className="text-xs text-magi-destructive mt-1">The photo didn&apos;t match your reference photo. Check the lighting and try again.</p>
+          </div>
+        )}
         {!screenChecked && (
           <p role="status" className="text-xs text-magi-secondary">
             Checking your screen… If your computer asks whether to allow screenshots, allow it.
           </p>
         )}
-        <button type="button" disabled={id === "" || !ready || !screenChecked} onClick={start} className={`${primaryButtonClass} mx-auto`}>
-          {camera.problem ? "Start without the photo" : ready ? "Take the photo and start the exam" : "Starting camera…"}
+        <button type="button" disabled={id === "" || !ready || !screenChecked || verifying} onClick={() => void start()} className={`${primaryButtonClass} mx-auto`}>
+          {camera.problem ? "Start without the photo" : verifying ? "Verifying your identity…" : ready ? "Take the photo and start the exam" : "Starting camera…"}
         </button>
         <p className="text-xs text-magi-secondary">The exam clock starts when you press the button.</p>
         <button type="button" onClick={onCancel} className="text-xs text-magi-secondary hover:text-magi-primary transition-colors">
@@ -180,12 +207,14 @@ function Identity({ onReady, onCancel }: { onReady: (checkIn: CheckIn) => void; 
 export function PreExam({
   examName,
   withPhotos,
+  token,
   onReady,
   onCancel,
 }: {
   examName: string;
   /** false when an exam that is already running is picked up again: only the computer is checked */
   withPhotos: boolean;
+  token: string;
   onReady: (checkIn: CheckIn) => void;
   onCancel: () => void;
 }) {
@@ -205,7 +234,7 @@ export function PreExam({
       {!acknowledged ? (
         <Warning onContinue={() => setAcknowledged(true)} onCancel={onCancel} />
       ) : checked ? (
-        <Identity onReady={onReady} onCancel={onCancel} />
+        <Identity token={token} onReady={onReady} onCancel={onCancel} />
       ) : (
         <Environment onPassed={passed} onCancel={onCancel} />
       )}

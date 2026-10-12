@@ -483,6 +483,7 @@ export function AuthPanel({
         <PreExam
           examName={exams?.find((e) => e.id === checking.examId)?.name ?? "Exam"}
           withPhotos={!checking.resumes}
+          token={session.token}
           onReady={(checkedIn) => void onStartAttempt(checking.examId, checking.resumes, checkedIn)}
           onCancel={() => setChecking(null)}
         />

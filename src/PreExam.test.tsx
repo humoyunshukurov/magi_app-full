@@ -1,10 +1,12 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PreExam, RECHECK_MS } from "./PreExam";
+import { checkIdentity } from "./api";
 import { environmentCheck, screenshotTake } from "./ipc";
 import { useCamera } from "./useCamera";
 
 vi.mock("./ipc", () => ({ environmentCheck: vi.fn(), screenshotTake: vi.fn() }));
+vi.mock("./api", () => ({ checkIdentity: vi.fn() }));
 vi.mock("./useCamera", async () => {
   const { createElement } = await import("react");
   return { useCamera: vi.fn(), CameraPicture: () => createElement("div", { "aria-label": "Your camera" }) };
@@ -23,7 +25,7 @@ const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAs
 function open(withPhotos = true) {
   const onReady = vi.fn();
   const onCancel = vi.fn();
-  render(<PreExam examName="Writing Test" withPhotos={withPhotos} onReady={onReady} onCancel={onCancel} />);
+  render(<PreExam examName="Writing Test" withPhotos={withPhotos} token="TOKEN" onReady={onReady} onCancel={onCancel} />);
   fireEvent.click(screen.getByRole("button", { name: "OK" }));
   return { onReady, onCancel };
 }
@@ -40,6 +42,9 @@ beforeEach(() => {
     cameraEvent = onEvent;
     return camera();
   });
+  // no reference photo on file by default - the common case, and the one every pre-existing
+  // test below relies on to reach onReady without being about the identity check itself
+  vi.mocked(checkIdentity).mockResolvedValue({ success: true, hasReference: false, matched: true, outcome: "no_reference" });
 });
 
 afterEach(() => {
@@ -50,14 +55,14 @@ afterEach(() => {
 
 describe("PreExam, the warning", () => {
   it("shows the lock-and-leave warning first, before any check runs", () => {
-    render(<PreExam examName="Writing Test" withPhotos onReady={vi.fn()} onCancel={vi.fn()} />);
+    render(<PreExam examName="Writing Test" withPhotos token="TOKEN" onReady={vi.fn()} onCancel={vi.fn()} />);
     expect(screen.getByText("Before you start")).toBeTruthy();
     expect(environmentCheck).not.toHaveBeenCalled();
   });
 
   it("can be cancelled from the warning", () => {
     const onCancel = vi.fn();
-    render(<PreExam examName="Writing Test" withPhotos onReady={vi.fn()} onCancel={onCancel} />);
+    render(<PreExam examName="Writing Test" withPhotos token="TOKEN" onReady={vi.fn()} onCancel={onCancel} />);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).toHaveBeenCalled();
   });
@@ -188,8 +193,10 @@ describe("PreExam, the ID number and photo", () => {
     const { onReady } = await ready();
     typeId("  AB1234567 ");
     fireEvent.click(startButton());
+    await flush();
 
     expect(grab).toHaveBeenCalledTimes(1);
+    expect(checkIdentity).toHaveBeenCalledWith("TOKEN", "data:image/jpeg;base64,PHOTO");
     expect(onReady).toHaveBeenCalledWith({ idNumber: "AB1234567", photo: "data:image/jpeg;base64,PHOTO", notes: [] });
   });
 
@@ -221,6 +228,7 @@ describe("PreExam, the ID number and photo", () => {
     expect(onReady).not.toHaveBeenCalled();
 
     fireEvent.click(startButton());
+    await flush();
     expect(onReady).toHaveBeenCalledTimes(1);
   });
 
@@ -242,6 +250,7 @@ describe("PreExam, the ID number and photo", () => {
     const { onReady } = await ready();
     typeId("AB1");
     fireEvent.click(startButton());
+    await flush();
 
     expect(JSON.stringify(onReady.mock.calls[0]![0])).not.toContain("SCREEN");
   });
@@ -251,6 +260,7 @@ describe("PreExam, the ID number and photo", () => {
     const { onReady } = await ready();
     typeId("AB1");
     fireEvent.click(startButton());
+    await flush();
 
     expect(onReady.mock.calls[0]![0].notes).toEqual([{ kind: "screenshot_failed", detail: "Couldn't take a screenshot: the screenshot wasn't allowed" }]);
   });
@@ -274,5 +284,80 @@ describe("PreExam, the ID number and photo", () => {
     const { onCancel } = await ready();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).toHaveBeenCalled();
+  });
+});
+
+describe("PreExam, the reference photo check", () => {
+  async function ready() {
+    const view = open();
+    await flush();
+    return view;
+  }
+
+  it("goes straight to the exam when the student never set a reference photo", async () => {
+    vi.mocked(checkIdentity).mockResolvedValue({ success: true, hasReference: false, matched: true, outcome: "no_reference" });
+    const { onReady } = await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).toHaveBeenCalledWith({ idNumber: "AB1", photo: "data:image/jpeg;base64,PHOTO", notes: [] });
+  });
+
+  it("goes on to the exam when the photo matches the reference", async () => {
+    vi.mocked(checkIdentity).mockResolvedValue({ success: true, hasReference: true, matched: true, outcome: "matched" });
+    const { onReady } = await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).toHaveBeenCalled();
+  });
+
+  it("refuses to start the exam when the photo doesn't match the reference", async () => {
+    vi.mocked(checkIdentity).mockResolvedValue({ success: true, hasReference: true, matched: false, outcome: "mismatched" });
+    const { onReady } = await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("doesn't look like you");
+  });
+
+  it("lets the student try again after a mismatch", async () => {
+    vi.mocked(checkIdentity).mockResolvedValueOnce({ success: true, hasReference: true, matched: false, outcome: "mismatched" });
+    vi.mocked(checkIdentity).mockResolvedValueOnce({ success: true, hasReference: true, matched: true, outcome: "matched" });
+    const { onReady } = await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+    expect(onReady).not.toHaveBeenCalled();
+
+    fireEvent.click(startButton());
+    await flush();
+    expect(onReady).toHaveBeenCalled();
+  });
+
+  it("shows a verifying state while the check is in flight, and disables the button", async () => {
+    let resolve!: (value: Awaited<ReturnType<typeof checkIdentity>>) => void;
+    vi.mocked(checkIdentity).mockReturnValue(new Promise((r) => (resolve = r)));
+    await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect((screen.getByRole("button", { name: "Verifying your identity…" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => resolve({ success: true, hasReference: false, matched: true, outcome: "no_reference" }));
+  });
+
+  it("lets the exam start on a broken check, and notes it", async () => {
+    vi.mocked(checkIdentity).mockRejectedValue(new Error("network down"));
+    const { onReady } = await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady.mock.calls[0]![0].notes).toEqual([{ kind: "identity_check_failed", detail: "Could not verify your photo: Error: network down" }]);
   });
 });

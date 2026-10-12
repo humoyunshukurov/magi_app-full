@@ -321,3 +321,16 @@ export async function uploadMedia(token: string, attemptId: number, kind: Monito
   );
   return envelope.media;
 }
+
+const identityCheckSchema = z.object({
+  success: z.literal(true),
+  hasReference: z.boolean(),
+  matched: z.boolean(),
+  outcome: z.enum(["matched", "mismatched", "no_face_in_photo", "no_face_in_reference", "no_reference"]),
+});
+export type IdentityCheck = z.infer<typeof identityCheckSchema>;
+
+/** The entry gate before an exam: does this photo match the student's own reference photo, if they ever set one? */
+export async function checkIdentity(token: string, image: string) {
+  return request("/api/auth/me/identity-check", identityCheckSchema, { method: "POST", body: JSON.stringify({ image }) }, token);
+}

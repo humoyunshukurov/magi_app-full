@@ -35,6 +35,7 @@ export type ActivityKind =
   | "link_closed"
   | "link_blocked"
   | "identity_check"
+  | "identity_check_failed"
   | "screenshot"
   | "screenshot_failed"
   | "app_closed";
