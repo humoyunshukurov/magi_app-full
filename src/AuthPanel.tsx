@@ -131,6 +131,14 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Switching forms must not drag the old one's banner along - a wrong-password error from
+  // login has no business still showing once the student has moved on to creating an account.
+  function switchMode(next: "login" | "signup") {
+    setMode(next);
+    setError(null);
+    setNotice(null);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -158,14 +166,14 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
         {mode === "login" ? (
           <>
             Or{" "}
-            <button type="button" className="font-semibold text-magi-primary hover:text-magi-hover" onClick={() => setMode("signup")}>
+            <button type="button" className="font-semibold text-magi-primary hover:text-magi-hover" onClick={() => switchMode("signup")}>
               create a student account
             </button>
           </>
         ) : (
           <>
             Already have one?{" "}
-            <button type="button" className="font-semibold text-magi-primary hover:text-magi-hover" onClick={() => setMode("login")}>
+            <button type="button" className="font-semibold text-magi-primary hover:text-magi-hover" onClick={() => switchMode("login")}>
               sign in
             </button>
           </>
