@@ -66,6 +66,14 @@ describe("useCameraWatch", () => {
     expect(onEvent).toHaveBeenCalledWith("phone_seen", "A phone is in view of the camera", { image: PHOTO });
   });
 
+  it("takes a photo when a second face is seen", async () => {
+    looks = [{ faces: 2, phone: false }];
+    watch();
+    await advance(TICK_MS);
+
+    expect(onEvent).toHaveBeenCalledWith("extra_person", "2 faces in view of the camera", { image: PHOTO });
+  });
+
   it("looks for a phone on every other look only, since that is the slow part", async () => {
     watch();
     await advance(TICK_MS * 4);

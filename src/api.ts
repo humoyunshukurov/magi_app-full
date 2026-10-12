@@ -291,6 +291,7 @@ const cheatingTypeSchema = z.enum([
   "camera_away",
   "link_blocked",
   "app_closed",
+  "extra_person",
 ]);
 export type CheatingType = z.infer<typeof cheatingTypeSchema>;
 

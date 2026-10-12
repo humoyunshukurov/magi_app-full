@@ -1,10 +1,10 @@
-// Watches the camera picture while an exam is open and reports a phone in view, or nobody
-// in front of the camera, with a photo taken at that moment.
+// Watches the camera picture while an exam is open and reports a phone in view, nobody in front
+// of the camera, or a second face in it, with a photo taken at that moment.
 
 import { useEffect, useRef } from "react";
 import { createJudge, loadDetector } from "./cameraWatch";
 
-export type WatchEventKind = "phone_seen" | "camera_away" | "camera_back" | "camera_checks_off";
+export type WatchEventKind = "phone_seen" | "camera_away" | "camera_back" | "camera_checks_off" | "extra_person";
 type Picture = HTMLVideoElement | HTMLImageElement;
 
 export const TICK_MS = 1000;

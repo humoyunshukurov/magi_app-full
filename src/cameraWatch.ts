@@ -1,6 +1,6 @@
-// Looks at the camera picture for the two things that matter during an exam: a phone in view,
-// and nobody in front of the camera. Everything runs on this computer (MediaPipe, from the
-// app's own files); no picture leaves it.
+// Looks at the camera picture for what matters during an exam: a phone in view, nobody in front
+// of the camera, and more than one face in it. Everything runs on this computer (MediaPipe, from
+// the app's own files); no picture leaves it.
 
 /** What one look at the camera picture found. */
 export interface Look {
@@ -50,7 +50,8 @@ export async function loadDetector(): Promise<Detector> {
 export type Verdict =
   | { kind: "camera_away"; detail: string }
   | { kind: "camera_back"; detail: string; awaySeconds: number }
-  | { kind: "phone_seen"; detail: string };
+  | { kind: "phone_seen"; detail: string }
+  | { kind: "extra_person"; detail: string };
 
 /** How long nobody may be in front of the camera before it counts as leaving. */
 export const AWAY_MS = 3000;
@@ -60,6 +61,10 @@ const PHONE_LOOKS = 2;
 const PHONE_GONE_LOOKS = 3;
 /** The same thing isn't reported again this soon. */
 const PHONE_COOLDOWN_MS = 10_000;
+/** A second face is reported the moment it's seen - even a quick walk-by matters here. */
+const EXTRA_PERSON_LOOKS = 1;
+/** Looks in a row back down to one face before an extra person can be reported again. */
+const EXTRA_PERSON_GONE_LOOKS = 2;
 
 /** Turns a stream of looks into the few things worth writing down. */
 export function createJudge() {
@@ -69,6 +74,9 @@ export function createJudge() {
   let phoneReported = false;
   let clearLooks = PHONE_GONE_LOOKS;
   let lastPhoneAt = -Infinity;
+  let extraPersonLooks = 0;
+  let extraPersonReported = false;
+  let extraPersonClearLooks = EXTRA_PERSON_GONE_LOOKS;
 
   return {
     feed(look: Look, now: number): Verdict[] {
@@ -87,6 +95,19 @@ export function createJudge() {
         }
         missingSince = null;
         away = false;
+      }
+
+      if (look.faces > 1) {
+        extraPersonLooks += 1;
+        extraPersonClearLooks = 0;
+        if (extraPersonLooks >= EXTRA_PERSON_LOOKS && !extraPersonReported) {
+          extraPersonReported = true;
+          verdicts.push({ kind: "extra_person", detail: `${look.faces} faces in view of the camera` });
+        }
+      } else {
+        extraPersonLooks = 0;
+        extraPersonClearLooks += 1;
+        if (extraPersonClearLooks >= EXTRA_PERSON_GONE_LOOKS) extraPersonReported = false;
       }
 
       if (look.phone === null) {

@@ -36,6 +36,7 @@ export type ActivityKind =
   | "link_blocked"
   | "identity_check"
   | "identity_check_failed"
+  | "extra_person"
   | "screenshot"
   | "screenshot_failed"
   | "app_closed";
@@ -59,10 +60,11 @@ const CHEATING_KIND: Partial<Record<ActivityKind, CheatingType>> = {
   app_closed: "app_closed",
   camera_away: "camera_away",
   phone_seen: "phone_seen",
+  extra_person: "extra_person",
 };
 
 // kinds whose `data.image` is a suspicious-moment photo worth keeping on the server too
-const PHOTO_KIND = new Set<ActivityKind>(["phone_seen", "camera_away", "screenshot"]);
+const PHOTO_KIND = new Set<ActivityKind>(["phone_seen", "camera_away", "extra_person", "screenshot"]);
 
 /** Records one entry. A failing local store (or a failed server sync) never gets in the way of the exam. */
 export function logActivity(
