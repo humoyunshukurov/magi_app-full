@@ -260,6 +260,33 @@ describe("AuthPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Reload exams" }));
       await screen.findByText("Second Exam");
     });
+
+    it("shows an error instead of silently looking empty when the list fails to load right after signing in", async () => {
+      queueFetch([loginResponse, { status: 500, body: { success: false, message: "exams unavailable" } }]);
+      render(<AuthPanel />);
+      signIn();
+
+      await screen.findByText("exams unavailable");
+      // not mistaken for the real "nothing assigned" state - the signed-in header is there, this is a failure banner on top of it
+      expect(screen.getByText("No exams assigned yet.")).toBeTruthy();
+    });
+
+    it("shows an error instead of silently logging the student out when a restored session's exam list fails to load", async () => {
+      localStorage.setItem(
+        "magi_session",
+        JSON.stringify({ token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } }),
+      );
+      queueFetch([
+        // GET /api/auth/get-user - no envelope, the decoded token payload directly
+        { status: 200, body: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } },
+        // GET /api/exams
+        { status: 500, body: { success: false, message: "exams unavailable" } },
+      ]);
+      render(<AuthPanel />);
+
+      await screen.findByText("exams unavailable");
+      expect(screen.queryByLabelText("Email Address")).toBeNull(); // still signed in, not bounced back to the login form
+    });
   });
 
   describe("the check before the exam", () => {

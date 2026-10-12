@@ -377,7 +377,14 @@ export function AuthPanel({
       .then(async (user) => {
         const restored = { token: stored.token, user };
         setSession(restored);
-        setExams(await listExams(restored.token));
+        // Caught right here, not left to fall into the catch below: a failure fetching exams
+        // is not "the token is no good" and must not log the student back out over it, but it
+        // still has to be shown - otherwise exams stays null, which renders as an empty list.
+        try {
+          setExams(await listExams(restored.token));
+        } catch (err) {
+          setError(err instanceof ApiError ? err.message : String(err));
+        }
       })
       .catch((err) => {
         // Only a genuine "that token is no good" answer should force a re-login - if the
@@ -390,7 +397,14 @@ export function AuthPanel({
   async function onSignedIn(newSession: Session) {
     setSession(newSession);
     storeSession(newSession);
-    setExams(await listExams(newSession.token));
+    // A failure here must not vanish silently: without this, exams stays null, which the list
+    // below renders as an empty "[]" - the student would see "No exams assigned yet." with no
+    // hint that anything actually went wrong.
+    try {
+      setExams(await listExams(newSession.token));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
   }
 
   async function onLogout() {
