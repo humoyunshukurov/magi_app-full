@@ -50,7 +50,7 @@ describe("api client envelope handling", () => {
   it("parses ids as numbers, not bigint, since that's what's actually on the wire", async () => {
     mockFetchOnce(200, {
       success: true,
-      exams: [{ id: 9007199254740991, name: "E", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 100, passing_marks: 50 }],
+      exams: [{ id: 9007199254740991, name: "E", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 100, passing_marks: 50 }],
     });
     const exams = await listExams("token");
     expect(typeof exams[0]?.id).toBe("number");

@@ -37,7 +37,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const exam = { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
+const exam = { id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
 const loginResponse = {
   status: 200,
   body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } },
@@ -71,7 +71,7 @@ describe("AuthPanel", () => {
       // GET /api/exams
       {
         status: 200,
-        body: { success: true, exams: [{ id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 }] },
+        body: { success: true, exams: [{ id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 }] },
       },
       // POST /api/attempts
       {

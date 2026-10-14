@@ -114,9 +114,12 @@ const examStatusSchema = z.enum(["demo", "scheduled", "ongoing", "completed", "d
 const permittedUrlSchema = z.object({ id: z.number(), url: z.string() });
 const attemptStatusSchema = z.enum(["pending", "in_progress", "submitted", "auto_submitted", "graded", "flagged"]);
 
+const examKindSchema = z.enum(["exam", "homework"]);
+
 const examSummarySchema = z.object({
   id: z.number(),
   name: z.string(),
+  kind: examKindSchema,
   scheduled_start: z.string(),
   scheduled_end: z.string(),
   status: examStatusSchema,

@@ -60,7 +60,7 @@ describe("App navigation", () => {
   });
 
   it("takes the sidebar away while an exam is open", async () => {
-    const exam = { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
+    const exam = { id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
     const attempt = {
       id: 28, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
       session_duration: 60, session_duration_unit: "seconds", expires_at: "2099-01-01T00:01:00Z", remaining_seconds: 60, exam,
@@ -101,7 +101,7 @@ describe("App navigation", () => {
   });
 
   it("shows a graded exam's score and feedback on the Grades page", async () => {
-    const exam = { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
+    const exam = { id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
     const gradedAttempt = {
       id: 90, exam_id: 15, status: "graded", started_at: null, submitted_at: "2026-01-01T00:10:00Z", auto_submitted: false,
       session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:11:00Z", remaining_seconds: 0, exam,

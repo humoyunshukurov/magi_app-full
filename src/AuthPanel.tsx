@@ -306,7 +306,12 @@ function ExamList({
       {exams.map((exam) => (
         <div key={exam.id} className="p-4 rounded-lg bg-magi-surface border border-magi-border flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-bold text-magi-primary">{exam.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-magi-primary">{exam.name}</h3>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-magi-border/60 text-magi-secondary">
+                {exam.kind === "homework" ? "HW" : "Exam"}
+              </span>
+            </div>
             <p className="text-magi-secondary text-xs font-light mt-1 uppercase tracking-wide">{exam.status}</p>
             {!exam.attempt_status && <StartsIn scheduledStart={exam.scheduled_start} />}
           </div>
