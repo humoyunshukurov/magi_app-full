@@ -24,9 +24,10 @@ export async function ping(): Promise<PingResponse> {
   return pingResponseSchema.parse(raw);
 }
 
-/** Payload emitted by the Rust deep-link handler on `magi://launch?token=…` (ADR-0010). */
+/** Payload emitted by the Rust deep-link handler on `magi://launch…` (ADR-0010). */
 export const launchPayloadSchema = z.object({
-  token: z.string(),
+  token: z.string().nullable(),
+  exam_id: z.number().nullable(),
 });
 
 export type LaunchPayload = z.infer<typeof launchPayloadSchema>;

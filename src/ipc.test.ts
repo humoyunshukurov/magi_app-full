@@ -14,8 +14,16 @@ describe("ipc schemas", () => {
     expect(() => pingResponseSchema.parse({ message: 1 })).toThrow();
   });
 
-  it("accepts a launch payload and rejects a missing token", () => {
-    expect(launchPayloadSchema.parse({ token: "stub" }).token).toBe("stub");
+  it("accepts a launch payload with a token, an exam id, both or neither", () => {
+    expect(launchPayloadSchema.parse({ token: "stub", exam_id: 42 })).toEqual({ token: "stub", exam_id: 42 });
+    expect(launchPayloadSchema.parse({ token: "stub", exam_id: null })).toEqual({ token: "stub", exam_id: null });
+    expect(launchPayloadSchema.parse({ token: null, exam_id: 42 })).toEqual({ token: null, exam_id: 42 });
+    expect(launchPayloadSchema.parse({ token: null, exam_id: null })).toEqual({ token: null, exam_id: null });
+  });
+
+  it("rejects a payload missing either field", () => {
     expect(launchPayloadSchema.safeParse({}).success).toBe(false);
+    expect(launchPayloadSchema.safeParse({ token: "stub" }).success).toBe(false);
+    expect(launchPayloadSchema.safeParse({ exam_id: 42 }).success).toBe(false);
   });
 });

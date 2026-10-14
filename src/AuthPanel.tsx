@@ -19,7 +19,8 @@ import {
   type ExamSummary,
   type UserSummary,
 } from "./api";
-import { examLock } from "./ipc";
+import { listen } from "@tauri-apps/api/event";
+import { examLock, launchPayloadSchema, LAUNCH_EVENT } from "./ipc";
 import { PreExam, type CheckIn } from "./PreExam";
 import { AttemptSession, type AttemptView } from "./AttemptSession";
 import { inputClass, primaryButtonClass } from "./ui";
@@ -369,10 +370,36 @@ export function AuthPanel({
   const [checking, setChecking] = useState<{ examId: number; resumes: boolean } | null>(null);
   const [checkIn, setCheckIn] = useState<CheckIn | null>(null);
   const [reloading, setReloading] = useState(false);
+  const [pendingExamId, setPendingExamId] = useState<number | null>(null);
 
   useEffect(() => {
     onSessionChange?.(session ? { user: session.user, token: session.token } : null);
   }, [session, onSessionChange]);
+
+  // A magi://launch?examId=… deep link names an exam to jump straight to - held here until a
+  // session and the exam list are both ready, since the link can arrive before either is.
+  useEffect(() => {
+    const unlisten = listen(LAUNCH_EVENT, (event) => {
+      const parsed = launchPayloadSchema.safeParse(event.payload);
+      if (parsed.success && parsed.data.exam_id !== null) setPendingExamId(parsed.data.exam_id);
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Once there's a session and the exam list to check it against, send the student straight into
+  // that exam's own Start flow - same path as pressing Start themselves, checks and all. An exam
+  // that's already submitted or graded has nothing left to start, so this just drops the request.
+  useEffect(() => {
+    if (pendingExamId === null || !session || !exams || attempt || checking) return;
+    const target = exams.find((e) => e.id === pendingExamId);
+    setPendingExamId(null);
+    if (!target) return;
+    if (target.attempt_status === "graded" || target.attempt_status === "submitted" || target.attempt_status === "auto_submitted") return;
+    onStart(target.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingExamId, session, exams, attempt, checking]);
 
   useEffect(() => {
     onExamRunning?.(attempt !== null || checking !== null);

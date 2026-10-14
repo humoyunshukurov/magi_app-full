@@ -3,8 +3,21 @@
 // like magi-server's real responses. This is what stands in for a browser here.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AuthPanel } from "./AuthPanel";
+
+// captures the handler AuthPanel registers, so a test can fire a fake magi://launch event at it
+const { listen, emitLaunch } = vi.hoisted(() => {
+  let handler: ((event: { payload: unknown }) => void) | null = null;
+  return {
+    listen: vi.fn((_event: string, cb: (event: { payload: unknown }) => void) => {
+      handler = cb;
+      return Promise.resolve(() => undefined);
+    }),
+    emitLaunch: (payload: unknown) => handler?.({ payload }),
+  };
+});
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 
 vi.mock("./PreExam", async () => {
   const { createElement } = await import("react");
@@ -378,6 +391,51 @@ describe("AuthPanel", () => {
       expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Log out" })).toBeTruthy();
       expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("magi://launch deep link", () => {
+    it("jumps straight to that exam's check-in once signed in", async () => {
+      queueFetch([loginResponse, examsResponse]);
+      render(<AuthPanel />);
+      signIn();
+      await screen.findByText(/Test Exam/);
+
+      act(() => emitLaunch({ token: null, exam_id: exam.id }));
+      await screen.findByText("photos: true");
+    });
+
+    it("waits for sign-in and the exam list before acting on a link that arrived early", async () => {
+      queueFetch([loginResponse, examsResponse]);
+      render(<AuthPanel />);
+      // the link lands before the student has even signed in
+      act(() => emitLaunch({ token: null, exam_id: exam.id }));
+
+      signIn();
+      await screen.findByText(/Test Exam/);
+      await screen.findByText("photos: true");
+    });
+
+    it("does nothing for an exam that's already graded", async () => {
+      queueFetch([loginResponse, { status: 200, body: { success: true, exams: [{ ...exam, attempt_status: "graded" }] } }]);
+      render(<AuthPanel />);
+      signIn();
+      await screen.findByText(/Test Exam/);
+
+      act(() => emitLaunch({ token: null, exam_id: exam.id }));
+      await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
+      expect(screen.queryByText("photos: true")).toBeNull();
+    });
+
+    it("does nothing without an exam id", async () => {
+      queueFetch([loginResponse, examsResponse]);
+      render(<AuthPanel />);
+      signIn();
+      await screen.findByText(/Test Exam/);
+
+      act(() => emitLaunch({ token: "stub", exam_id: null }));
+      await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));
+      expect(screen.queryByText("photos: true")).toBeNull();
     });
   });
 });
