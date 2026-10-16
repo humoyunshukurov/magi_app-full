@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadDetector, type Look } from "./cameraWatch";
-import { TICK_MS, useCameraWatch } from "./useCameraWatch";
+import { PHOTO_LIMIT, TICK_MS, useCameraWatch } from "./useCameraWatch";
 
 vi.mock("./cameraWatch", async (importOriginal) => ({ ...(await importOriginal<typeof import("./cameraWatch")>()), loadDetector: vi.fn() }));
 
@@ -72,6 +72,27 @@ describe("useCameraWatch", () => {
     await advance(TICK_MS);
 
     expect(onEvent).toHaveBeenCalledWith("extra_person", "2 faces in view of the camera", { image: PHOTO });
+  });
+
+  it("gives each event kind its own photo budget, so a flood of one kind can't starve another", async () => {
+    // faces=2 reports extra_person with a photo, then two faces=1 looks clear it so it can
+    // fire again - repeated one more time than the budget allows
+    const extraPersonCycle: Look[] = [{ faces: 2, phone: false }, { faces: 1, phone: false }, { faces: 1, phone: false }];
+    looks = [
+      ...Array.from({ length: PHOTO_LIMIT + 1 }, () => extraPersonCycle).flat(),
+      { faces: 1, phone: true },
+      { faces: 1, phone: true },
+    ];
+    watch();
+    await advance(TICK_MS * (looks.length + 2));
+
+    const extraPersonCalls = onEvent.mock.calls.filter(([kind]) => kind === "extra_person");
+    expect(extraPersonCalls).toHaveLength(PHOTO_LIMIT + 1);
+    expect(extraPersonCalls[PHOTO_LIMIT - 1]).toEqual(["extra_person", expect.any(String), { image: PHOTO }]);
+    expect(extraPersonCalls[PHOTO_LIMIT]).toEqual(["extra_person", expect.any(String), {}]); // budget used up
+
+    // phone_seen still gets its own photo - extra_person running out never touched it
+    expect(onEvent).toHaveBeenCalledWith("phone_seen", "A phone is in view of the camera", { image: PHOTO });
   });
 
   it("looks for a phone on every other look only, since that is the slow part", async () => {

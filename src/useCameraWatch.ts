@@ -10,7 +10,9 @@ type Picture = HTMLVideoElement | HTMLImageElement;
 export const TICK_MS = 1000;
 /** Looking for a phone is the slow part, so it happens on every other look. */
 const PHONE_EVERY = 2;
-/** Photos are kept on this computer, so there is a cap per exam. */
+/** Photos are kept on this computer, so there is a cap per exam - per event kind, so a run of
+ * camera_away/extra_person events (an easily-flaked face read) can't use up the budget a genuine
+ * phone_seen later in the exam would otherwise get. */
 export const PHOTO_LIMIT = 20;
 const MAX_SIDE = 640;
 
@@ -37,7 +39,7 @@ export function useCameraWatch(
     const canvas = document.createElement("canvas");
     const judge = createJudge();
     let looks = 0;
-    let photos = 0;
+    const photosByKind: Partial<Record<WatchEventKind, number>> = {};
 
     const tick = () => {
       const source = pictureRef.current();
@@ -54,9 +56,10 @@ export function useCameraWatch(
             if (verdict.kind === "camera_back") {
               report.current(verdict.kind, verdict.detail, { away_seconds: verdict.awaySeconds });
             } else {
-              // the photo is the frame that was just looked at
-              const image = photos < PHOTO_LIMIT ? canvas.toDataURL("image/jpeg", 0.7) : null;
-              if (image) photos += 1;
+              // the photo is the frame that was just looked at - budget tracked per event kind
+              const taken = photosByKind[verdict.kind] ?? 0;
+              const image = taken < PHOTO_LIMIT ? canvas.toDataURL("image/jpeg", 0.7) : null;
+              if (image) photosByKind[verdict.kind] = taken + 1;
               report.current(verdict.kind, verdict.detail, image ? { image } : {});
             }
           }

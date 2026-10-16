@@ -66,7 +66,17 @@ const CHEATING_KIND: Partial<Record<ActivityKind, CheatingType>> = {
 // kinds whose `data.image` is a suspicious-moment photo worth keeping on the server too
 const PHOTO_KIND = new Set<ActivityKind>(["phone_seen", "camera_away", "extra_person", "screenshot"]);
 
-/** Records one entry. A failing local store (or a failed server sync) never gets in the way of the exam. */
+// a proctoring sync (cheating report, snapshot upload) is worth one retry after a transient
+// network blip before giving up - still fire-and-forget from the caller's point of view
+function syncOnce<T>(label: string, run: () => Promise<T>) {
+  run().catch((err) => {
+    console.error(`${label} failed, retrying once:`, err);
+    run().catch((retryErr) => console.error(`${label} failed again, giving up:`, retryErr));
+  });
+}
+
+/** Records one entry. A failing local store (or a failed server sync) never gets in the way of
+ * the exam - but every failure is at least logged, instead of disappearing silently. */
 export function logActivity(
   ctx: ActivityContext,
   kind: ActivityKind,
@@ -83,16 +93,16 @@ export function logActivity(
     detail,
     data: JSON.stringify(extra.data ?? {}),
   };
-  activityLog(event).catch(() => undefined);
+  syncOnce(`activityLog(${kind})`, () => activityLog(event));
 
   const cheatingType = CHEATING_KIND[kind];
   if (cheatingType) {
-    reportCheating(ctx.token, ctx.attemptId, cheatingType, detail).catch(() => undefined);
+    syncOnce(`reportCheating(${cheatingType})`, () => reportCheating(ctx.token, ctx.attemptId, cheatingType, detail));
   }
 
   const image = extra.data?.image;
   if (PHOTO_KIND.has(kind) && typeof image === "string") {
-    uploadMedia(ctx.token, ctx.attemptId, "snapshots", image, detail).catch(() => undefined);
+    syncOnce(`uploadMedia(${kind})`, () => uploadMedia(ctx.token, ctx.attemptId, "snapshots", image, detail));
   }
 }
 
