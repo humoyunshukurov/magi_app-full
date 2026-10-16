@@ -80,8 +80,9 @@ export function useCamera(onEvent: (kind: CameraEventKind, detail: string) => vo
     };
   }, []);
 
-  /** A photo of what the camera sees right now, as a JPEG data URL; null when there is no picture yet. */
-  const grab = (): string | null => {
+  /** A photo of what the camera sees right now, as a JPEG data URL plus the canvas it came from
+   * (for a face-detection pass before it's sent anywhere); null when there is no picture yet. */
+  const grab = (): { dataUrl: string; canvas: HTMLCanvasElement } | null => {
     const picture = source === "app" ? image.current : video.current;
     if (!picture) return null;
     const w = picture instanceof HTMLVideoElement ? picture.videoWidth : picture.naturalWidth;
@@ -92,7 +93,7 @@ export function useCamera(onEvent: (kind: CameraEventKind, detail: string) => vo
     canvas.width = Math.round(w * scale);
     canvas.height = Math.round(h * scale);
     canvas.getContext("2d")?.drawImage(picture, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.8);
+    return { dataUrl: canvas.toDataURL("image/jpeg", 0.8), canvas };
   };
 
   return { source, problem, video, image, grab };

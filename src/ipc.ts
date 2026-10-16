@@ -45,6 +45,7 @@ export const answerDraftSchema = z.object({
   text_typed: z.number(),
   text_edited: z.number(),
   text_pasted: z.number(),
+  paste_events: z.number(),
   text_deleted: z.number(),
   freeze_count: z.number(),
   longest_freeze: z.number(),

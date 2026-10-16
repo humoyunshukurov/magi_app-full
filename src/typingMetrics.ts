@@ -8,6 +8,8 @@ export interface TypingMetrics {
   edited: number;
   /** Characters pasted (or dropped) in. */
   pasted: number;
+  /** Paste (or drop) operations specifically, regardless of how many characters each carried. */
+  pasteEvents: number;
   /** Delete operations specifically (a subset of `edited`). */
   deleted: number;
   /** Active typing time; a pause longer than {@link IDLE_GAP_MS} doesn't count. */
@@ -25,6 +27,7 @@ export const emptyMetrics = (): TypingMetrics => ({
   typed: 0,
   edited: 0,
   pasted: 0,
+  pasteEvents: 0,
   deleted: 0,
   typingMs: 0,
   freezeCount: 0,
@@ -66,6 +69,7 @@ export function applyInput(m: TypingMetrics, ctx: InputContext): TypingMetrics {
     if (replacesOrInsertsMidText) next.edited += 1;
   } else if (PASTED.has(inputType)) {
     next.pasted += ctx.data?.length ?? 0;
+    next.pasteEvents += 1;
     if (replacesOrInsertsMidText) next.edited += 1;
   } else if (inputType.startsWith("delete")) {
     const nothingToDelete =

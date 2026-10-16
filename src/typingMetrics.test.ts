@@ -54,6 +54,13 @@ describe("applyInput", () => {
     expect(over).toMatchObject({ pasted: 3, edited: 1 });
   });
 
+  it("counts paste operations separately from pasted characters", () => {
+    let m = emptyMetrics();
+    m = applyInput(m, ctx({ inputType: "insertFromPaste", data: "ab", selectionStart: 0, selectionEnd: 0, valueLength: 0 }));
+    m = applyInput(m, ctx({ inputType: "insertFromPaste", data: "cdef", selectionStart: 2, selectionEnd: 2, valueLength: 2 }));
+    expect(m).toMatchObject({ pasted: 6, pasteEvents: 2 });
+  });
+
   it("counts undo/redo as edits", () => {
     expect(applyInput(emptyMetrics(), ctx({ inputType: "historyUndo", data: null })).edited).toBe(1);
   });

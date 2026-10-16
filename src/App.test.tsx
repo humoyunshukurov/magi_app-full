@@ -69,7 +69,7 @@ describe("App navigation", () => {
         expected_duration: 60, expected_duration_unit: "seconds", marks: 10,
         options: [{ id: 51, option_text: "Yes" }, { id: 52, option_text: "No" }],
         answer: "", selected_option_ids: [], typing_duration: 0, typing_duration_unit: "seconds",
-        text_typed: 0, text_edited: 0, text_pasted: 0, text_deleted: 0, freeze_count: 0, longest_freeze: 0, started_at: null, answered_at: null, last_synced_at: null,
+        text_typed: 0, text_edited: 0, text_pasted: 0, paste_events: 0, text_deleted: 0, freeze_count: 0, longest_freeze: 0, started_at: null, answered_at: null, last_synced_at: null,
       }],
       permitted_urls: [],
     };

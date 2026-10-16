@@ -2,11 +2,13 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PreExam, RECHECK_MS } from "./PreExam";
 import { checkIdentity } from "./api";
+import { loadDetector } from "./cameraWatch";
 import { environmentCheck, screenshotTake } from "./ipc";
 import { useCamera } from "./useCamera";
 
 vi.mock("./ipc", () => ({ environmentCheck: vi.fn(), screenshotTake: vi.fn() }));
 vi.mock("./api", () => ({ checkIdentity: vi.fn() }));
+vi.mock("./cameraWatch", () => ({ loadDetector: vi.fn() }));
 vi.mock("./useCamera", async () => {
   const { createElement } = await import("react");
   return { useCamera: vi.fn(), CameraPicture: () => createElement("div", { "aria-label": "Your camera" }) };
@@ -14,6 +16,7 @@ vi.mock("./useCamera", async () => {
 
 const calm = { monitor_count: 1, extra_screens_allowed: false, forbidden_apps: [], browsers: ["chrome"], other_windows: [], other_windows_allowed: false };
 const grab = vi.fn();
+const look = vi.fn();
 let cameraEvent: Parameters<typeof useCamera>[0];
 
 const camera = (over: Partial<ReturnType<typeof useCamera>> = {}) =>
@@ -37,7 +40,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.mocked(environmentCheck).mockResolvedValue(calm);
   vi.mocked(screenshotTake).mockResolvedValue("SCREEN");
-  grab.mockReturnValue("data:image/jpeg;base64,PHOTO");
+  grab.mockReturnValue({ dataUrl: "data:image/jpeg;base64,PHOTO", canvas: {} });
+  look.mockReturnValue({ faces: 1, phone: null });
+  vi.mocked(loadDetector).mockResolvedValue({ look, close: vi.fn() });
   vi.mocked(useCamera).mockImplementation((onEvent) => {
     cameraEvent = onEvent;
     return camera();
@@ -284,6 +289,49 @@ describe("PreExam, the ID number and photo", () => {
     const { onCancel } = await ready();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancel).toHaveBeenCalled();
+  });
+});
+
+describe("PreExam, the face check", () => {
+  async function ready() {
+    const view = open();
+    await flush();
+    return view;
+  }
+
+  it("refuses the photo when no face is found in it, without checking identity", async () => {
+    look.mockReturnValue({ faces: 0, phone: null });
+    const { onReady } = await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(checkIdentity).not.toHaveBeenCalled();
+    expect(onReady).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("No face found in the photo");
+  });
+
+  it("lets the student try again after a no-face rejection", async () => {
+    look.mockReturnValueOnce({ faces: 0, phone: null }).mockReturnValue({ faces: 1, phone: null });
+    const { onReady } = await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+    expect(onReady).not.toHaveBeenCalled();
+
+    fireEvent.click(startButton());
+    await flush();
+    expect(onReady).toHaveBeenCalled();
+  });
+
+  it("skips the face check when the detector never loaded, rather than block the student", async () => {
+    vi.mocked(loadDetector).mockRejectedValue(new Error("model failed to load"));
+    const { onReady } = await ready();
+    typeId("AB1");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).toHaveBeenCalled();
   });
 });
 

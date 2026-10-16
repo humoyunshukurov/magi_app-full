@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { checkIdentity } from "./api";
+import { loadDetector } from "./cameraWatch";
 import type { EnvironmentReport } from "./generated/EnvironmentReport";
 import { environmentCheck, screenshotTake } from "./ipc";
 import { inputClass, primaryButtonClass } from "./ui";
@@ -114,6 +115,8 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
   const [screenChecked, setScreenChecked] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [mismatch, setMismatch] = useState(false);
+  const [noFace, setNoFace] = useState(false);
+  const detector = useRef<Awaited<ReturnType<typeof loadDetector>> | null>(null);
 
   // While the student types, the screen is tried once and the picture thrown away: on some systems
   // the computer asks for permission to take screenshots, which is better settled now than in the
@@ -132,6 +135,21 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
     };
   }, []);
 
+  // Loaded ahead of time so it's ready the moment the photo is taken, same model the exam's own
+  // camera watch uses - a face check this cheap shouldn't need a server round trip.
+  useEffect(() => {
+    let cancelled = false;
+    loadDetector().then(
+      (loaded) => (cancelled ? loaded.close() : void (detector.current = loaded)),
+      () => undefined, // best-effort: a model that fails to load just skips the face check below
+    );
+    return () => {
+      cancelled = true;
+      detector.current?.close();
+      detector.current = null;
+    };
+  }, []);
+
   const id = idNumber.trim();
   // The reference photo check only runs when a photo was actually captured - no camera means
   // nothing to compare, and that path already proceeds (and is logged) on its own above.
@@ -141,11 +159,18 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
     setNotReady(photo === null);
     if (!photo) return;
 
+    setNoFace(false);
     setMismatch(false);
+
+    if (detector.current && detector.current.look(photo.canvas, { phone: false }).faces === 0) {
+      setNoFace(true);
+      return;
+    }
+
     setVerifying(true);
     let matched = true;
     try {
-      const check = await checkIdentity(token, photo);
+      const check = await checkIdentity(token, photo.dataUrl);
       matched = !check.hasReference || check.matched;
     } catch (err) {
       // a broken check must not lock a student out of an exam they're entitled to take - let
@@ -155,7 +180,7 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
     setVerifying(false);
 
     if (!matched) return setMismatch(true);
-    onReady({ idNumber: id, photo, notes: notes.current });
+    onReady({ idNumber: id, photo: photo.dataUrl, notes: notes.current });
   };
   const ready = camera.problem !== null || camera.source !== null;
 
@@ -181,6 +206,12 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
           <input id="id-number" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} autoComplete="off" className={inputClass} />
         </div>
         {notReady && <p className="text-xs text-magi-destructive">The camera picture isn't ready yet, try again in a moment.</p>}
+        {noFace && (
+          <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">
+            <p className="text-sm font-bold text-magi-destructive">No face found in the photo</p>
+            <p className="text-xs text-magi-destructive mt-1">Make sure your face is clearly visible to the camera and try again.</p>
+          </div>
+        )}
         {mismatch && (
           <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">
             <p className="text-sm font-bold text-magi-destructive">This doesn&apos;t look like you</p>

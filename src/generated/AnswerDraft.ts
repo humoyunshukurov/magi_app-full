@@ -29,6 +29,10 @@ text_edited: number,
  */
 text_pasted: number, 
 /**
+ * Paste (or drop) operations specifically, regardless of how many characters each carried.
+ */
+paste_events: number, 
+/**
  * Delete operations specifically (a subset of `text_edited`).
  */
 text_deleted: number, 

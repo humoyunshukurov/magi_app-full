@@ -50,6 +50,7 @@ function fromServer(q: Question): QuestionState {
       typed: q.text_typed,
       edited: q.text_edited,
       pasted: q.text_pasted,
+      pasteEvents: q.paste_events,
       deleted: q.text_deleted,
       typingMs: q.typing_duration * UNIT_SECONDS[q.typing_duration_unit] * 1000,
       freezeCount: q.freeze_count,
@@ -71,6 +72,7 @@ function fromDraft(d: AnswerDraft): QuestionState {
       typed: d.text_typed,
       edited: d.text_edited,
       pasted: d.text_pasted,
+      pasteEvents: d.paste_events,
       deleted: d.text_deleted,
       typingMs: d.typing_duration * 1000,
       freezeCount: d.freeze_count,
@@ -131,6 +133,20 @@ export function AttemptSession({
   const finished = useRef(false);
   const syncFailing = useRef(false);
 
+  // Characters typed so far, sampled every few seconds across the whole attempt (not per
+  // question) - a coarse WPM-over-time chart for staff, not anything read live during the exam.
+  const timeline = useRef<{ t: number; chars: number }[]>([]);
+  const timelineStart = useRef(Date.now());
+  const lastSampleAt = useRef(0);
+  const SAMPLE_MS = 5000;
+  const totalTyped = () => Object.values(store.current).reduce((sum, s) => sum + s.metrics.typed, 0);
+  const sampleTimeline = () => {
+    const now = Date.now();
+    if (now - lastSampleAt.current < SAMPLE_MS) return;
+    lastSampleAt.current = now;
+    timeline.current.push({ t: Math.round((now - timelineStart.current) / 1000), chars: totalTyped() });
+  };
+
   // Everything the student does here goes to the Activity log as well.
   const log = (kind: ActivityKind, detail: string, extra: { questionId?: number; data?: Record<string, unknown> } = {}) =>
     logActivity({ userId, token, attemptId: attempt.id, examName: attempt.exam.name }, kind, detail, extra);
@@ -156,7 +172,7 @@ export function AttemptSession({
     const spentSeconds = Math.round(s.timeSpentMs / 1000);
     log(
       "question_summary",
-      `Question ${position}: on screen ${spentSeconds} s, typed ${s.metrics.typed}, edited ${s.metrics.edited}, deleted ${s.metrics.deleted}, pasted ${s.metrics.pasted}, typing time ${typingSeconds} s, froze ${s.metrics.freezeCount} time(s)`,
+      `Question ${position}: on screen ${spentSeconds} s, typed ${s.metrics.typed}, edited ${s.metrics.edited}, deleted ${s.metrics.deleted}, pasted ${s.metrics.pasted} (${s.metrics.pasteEvents}x), typing time ${typingSeconds} s, froze ${s.metrics.freezeCount} time(s)`,
       {
         questionId: q.question_id,
         data: {
@@ -166,6 +182,7 @@ export function AttemptSession({
           edited: s.metrics.edited,
           deleted: s.metrics.deleted,
           pasted: s.metrics.pasted,
+          paste_events: s.metrics.pasteEvents,
           typing_seconds: typingSeconds,
           freeze_count: s.metrics.freezeCount,
           longest_freeze_seconds: Math.round(s.metrics.longestFreezeMs / 1000),
@@ -188,6 +205,7 @@ export function AttemptSession({
       text_typed: s.metrics.typed,
       text_edited: s.metrics.edited,
       text_pasted: s.metrics.pasted,
+      paste_events: s.metrics.pasteEvents,
       text_deleted: s.metrics.deleted,
       freeze_count: s.metrics.freezeCount,
       longest_freeze: Math.round(s.metrics.longestFreezeMs / 1000),
@@ -211,6 +229,7 @@ export function AttemptSession({
       text_typed: s.metrics.typed,
       text_edited: s.metrics.edited,
       text_pasted: s.metrics.pasted,
+      paste_events: s.metrics.pasteEvents,
       text_deleted: s.metrics.deleted,
       freeze_count: s.metrics.freezeCount,
       longest_freeze: Math.round(s.metrics.longestFreezeMs / 1000),
@@ -293,6 +312,7 @@ export function AttemptSession({
     const current = questions.find((q) => q.question_id === currentId.current);
     accumulateCurrent();
     if (current) logSummary(current);
+    timeline.current.push({ t: Math.round((Date.now() - timelineStart.current) / 1000), chars: totalTyped() });
 
     const saved = await syncNow();
     if (!saved && !auto) {
@@ -321,7 +341,7 @@ export function AttemptSession({
           )
         : log("attempt_submitted", "The student submitted the attempt", { data: completion });
     try {
-      const result = (await submitAttempt(token, attempt.id)).attempt;
+      const result = (await submitAttempt(token, attempt.id, timeline.current)).attempt;
       logSubmitted();
       finish(result, auto ? reason : undefined);
     } catch (err) {
@@ -387,6 +407,7 @@ export function AttemptSession({
     const id = setInterval(() => {
       const left = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000));
       setRemaining(left);
+      sampleTimeline();
       if (left === 0) void submit(true);
     }, 1000);
     return () => clearInterval(id);

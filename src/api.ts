@@ -191,6 +191,7 @@ const attemptQuestionSchema = z.object({
   text_typed: z.number(),
   text_edited: z.number(),
   text_pasted: z.number(),
+  paste_events: z.number(),
   text_deleted: z.number(),
   freeze_count: z.number(),
   longest_freeze: z.number(),
@@ -245,6 +246,7 @@ export interface AnswerInput {
   text_typed?: number;
   text_edited?: number;
   text_pasted?: number;
+  paste_events?: number;
   text_deleted?: number;
   freeze_count?: number;
   longest_freeze?: number;
@@ -264,6 +266,7 @@ export async function syncAnswers(token: string, attemptId: number, answers: Ans
       textTyped: a.text_typed,
       textEdited: a.text_edited,
       textPasted: a.text_pasted,
+      pasteEvents: a.paste_events,
       textDeleted: a.text_deleted,
       freezeCount: a.freeze_count,
       longestFreeze: a.longest_freeze,
@@ -280,11 +283,11 @@ export async function syncAnswers(token: string, attemptId: number, answers: Ans
   return { synced: envelope.synced, remaining_seconds: envelope.remaining_seconds };
 }
 
-export async function submitAttempt(token: string, attemptId: number) {
+export async function submitAttempt(token: string, attemptId: number, typingTimeline?: Array<{ t: number; chars: number }>) {
   const envelope = await request(
     `/api/assignments/${attemptId}/submit`,
     z.object({ success: z.literal(true), attempt: attemptSummarySchema, message: z.string() }),
-    { method: "POST" },
+    { method: "POST", body: JSON.stringify({ typingTimeline }) },
     token,
   );
   return { attempt: envelope.attempt, message: envelope.message };
