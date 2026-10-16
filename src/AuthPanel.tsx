@@ -290,6 +290,26 @@ function ExamAction({
   );
 }
 
+// Exams a student can act on right now (ongoing, or a demo open at any time) belong at the top
+// of the list, newest-created first; everything else follows, also newest-created first - id
+// order is a more reliable "newest" signal than scheduled_start, which a professor can set to
+// anything regardless of when the exam was actually created.
+const STATUS_RANK: Record<ExamSummary["status"], number> = {
+  ongoing: 0,
+  demo: 0,
+  scheduled: 1,
+  delayed: 1,
+  completed: 2,
+  cancelled: 3,
+};
+
+function sortExams(exams: ExamSummary[]): ExamSummary[] {
+  return [...exams].sort((a, b) => {
+    const rank = STATUS_RANK[a.status] - STATUS_RANK[b.status];
+    return rank !== 0 ? rank : b.id - a.id;
+  });
+}
+
 function ExamList({
   exams,
   startingId,
@@ -304,7 +324,7 @@ function ExamList({
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {exams.map((exam) => (
+      {sortExams(exams).map((exam) => (
         <div key={exam.id} className="p-4 rounded-lg bg-magi-surface border border-magi-border flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2">
