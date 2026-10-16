@@ -39,8 +39,8 @@ const exam = { id: 15, name: "Writing Test", scheduled_start: "2026-01-01T00:00:
 const question = (over: Partial<AttemptView["questions"][number]>): AttemptView["questions"][number] => ({
   question_id: 1, position: 1, title: "Q", question: "Explain.", question_type: "essay", expected_duration: 300,
   expected_duration_unit: "seconds", marks: 10, options: [], answer: "", selected_option_ids: [], typing_duration: 0,
-  typing_duration_unit: "seconds", text_typed: 0, text_edited: 0, text_pasted: 0, started_at: null, answered_at: null,
-  last_synced_at: null, ...over,
+  typing_duration_unit: "seconds", text_typed: 0, text_edited: 0, text_pasted: 0, text_deleted: 0, freeze_count: 0,
+  longest_freeze: 0, started_at: null, answered_at: null, last_synced_at: null, ...over,
 });
 
 const attempt = (remaining_seconds = 600): AttemptView => ({
@@ -192,7 +192,7 @@ describe("AttemptSession", () => {
 
   it("restores drafts from the local store and pushes them to the server", async () => {
     vi.mocked(draftLoad).mockResolvedValue([
-      { attempt_id: 77, question_id: 1, answer: "half-written", option_ids: [], typing_duration: 20, text_typed: 30, text_edited: 2, text_pasted: 0, time_spent: 60, started_at: "2026-09-28T10:00:00.000Z", answered_at: null },
+      { attempt_id: 77, question_id: 1, answer: "half-written", option_ids: [], typing_duration: 20, text_typed: 30, text_edited: 2, text_pasted: 0, text_deleted: 0, freeze_count: 0, longest_freeze: 0, time_spent: 60, started_at: "2026-09-28T10:00:00.000Z", answered_at: null },
     ]);
     renderSession();
     await flush();
@@ -370,7 +370,7 @@ describe("AttemptSession", () => {
 
     it("says when saved answers were restored after a restart", async () => {
       vi.mocked(draftLoad).mockResolvedValue([
-        { attempt_id: 77, question_id: 1, answer: "half", option_ids: [], typing_duration: 1, text_typed: 4, text_edited: 0, text_pasted: 0, time_spent: 5, started_at: null, answered_at: null },
+        { attempt_id: 77, question_id: 1, answer: "half", option_ids: [], typing_duration: 1, text_typed: 4, text_edited: 0, text_pasted: 0, text_deleted: 0, freeze_count: 0, longest_freeze: 0, time_spent: 5, started_at: null, answered_at: null },
       ]);
       renderSession();
       await flush();
@@ -389,7 +389,8 @@ describe("AttemptSession", () => {
       const [summary] = logged("question_summary");
       expect(summary).toMatchObject({ question_id: 1 });
       expect(dataOf(summary)).toEqual({
-        label: "Question 1 (essay)", position: 1, typed: 5, edited: 0, pasted: 0, typing_seconds: 0, time_spent_seconds: 3, answered: true,
+        label: "Question 1 (essay)", position: 1, typed: 5, edited: 0, deleted: 0, pasted: 0, typing_seconds: 0,
+        freeze_count: 0, longest_freeze_seconds: 0, time_spent_seconds: 3, answered: true,
       });
     });
 

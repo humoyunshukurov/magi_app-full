@@ -8,13 +8,28 @@ export interface TypingMetrics {
   edited: number;
   /** Characters pasted (or dropped) in. */
   pasted: number;
+  /** Delete operations specifically (a subset of `edited`). */
+  deleted: number;
   /** Active typing time; a pause longer than {@link IDLE_GAP_MS} doesn't count. */
   typingMs: number;
+  /** Pauses longer than {@link FREEZE_GAP_MS} between two inputs. */
+  freezeCount: number;
+  /** The longest such pause, in ms. */
+  longestFreezeMs: number;
 }
 
 export const IDLE_GAP_MS = 5000;
+export const FREEZE_GAP_MS = 15000;
 
-export const emptyMetrics = (): TypingMetrics => ({ typed: 0, edited: 0, pasted: 0, typingMs: 0 });
+export const emptyMetrics = (): TypingMetrics => ({
+  typed: 0,
+  edited: 0,
+  pasted: 0,
+  deleted: 0,
+  typingMs: 0,
+  freezeCount: 0,
+  longestFreezeMs: 0,
+});
 
 export interface InputContext {
   inputType: string;
@@ -35,8 +50,13 @@ export function applyInput(m: TypingMetrics, ctx: InputContext): TypingMetrics {
   const { inputType, selectionStart: start, selectionEnd: end, valueLength } = ctx;
   const next = { ...m };
 
-  if (ctx.lastInputAt !== null && ctx.now - ctx.lastInputAt <= IDLE_GAP_MS) {
-    next.typingMs += ctx.now - ctx.lastInputAt;
+  if (ctx.lastInputAt !== null) {
+    const gap = ctx.now - ctx.lastInputAt;
+    if (gap <= IDLE_GAP_MS) next.typingMs += gap;
+    if (gap > FREEZE_GAP_MS) {
+      next.freezeCount += 1;
+      next.longestFreezeMs = Math.max(next.longestFreezeMs, gap);
+    }
   }
 
   const replacesOrInsertsMidText = start !== end || start < valueLength;
@@ -51,7 +71,10 @@ export function applyInput(m: TypingMetrics, ctx: InputContext): TypingMetrics {
     const nothingToDelete =
       start === end &&
       ((inputType.endsWith("Backward") && start === 0) || (inputType.endsWith("Forward") && start === valueLength));
-    if (!nothingToDelete) next.edited += 1;
+    if (!nothingToDelete) {
+      next.edited += 1;
+      next.deleted += 1;
+    }
   } else if (inputType === "historyUndo" || inputType === "historyRedo" || inputType === "insertReplacementText") {
     next.edited += 1;
   }

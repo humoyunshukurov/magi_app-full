@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyInput, emptyMetrics, IDLE_GAP_MS, type InputContext } from "./typingMetrics";
+import { applyInput, emptyMetrics, FREEZE_GAP_MS, IDLE_GAP_MS, type InputContext } from "./typingMetrics";
 
 const ctx = (over: Partial<InputContext>): InputContext => ({
   inputType: "insertText",
@@ -40,6 +40,13 @@ describe("applyInput", () => {
     expect(cut.edited).toBe(1);
   });
 
+  it("counts deletes separately from other edits too", () => {
+    const backspace = applyInput(emptyMetrics(), ctx({ inputType: "deleteContentBackward", data: null, selectionStart: 3, selectionEnd: 3, valueLength: 3 }));
+    expect(backspace.deleted).toBe(1);
+    const middle = applyInput(emptyMetrics(), ctx({ selectionStart: 2, selectionEnd: 2, valueLength: 5 }));
+    expect(middle.deleted).toBe(0);
+  });
+
   it("counts pasted characters separately from typed ones", () => {
     const m = applyInput(emptyMetrics(), ctx({ inputType: "insertFromPaste", data: "twelve chars", selectionStart: 0, selectionEnd: 0, valueLength: 0 }));
     expect(m).toMatchObject({ typed: 0, pasted: 12, edited: 0 });
@@ -59,5 +66,18 @@ describe("applyInput", () => {
     expect(m.typingMs).toBe(1300);
     m = applyInput(m, ctx({ now: 2300 + IDLE_GAP_MS + 1, lastInputAt: 2300 }));
     expect(m.typingMs).toBe(1300);
+  });
+
+  it("counts a long pause as a freeze and tracks the longest one", () => {
+    let m = emptyMetrics();
+    m = applyInput(m, ctx({ now: 1000, lastInputAt: null }));
+    m = applyInput(m, ctx({ now: 1000 + FREEZE_GAP_MS + 1, lastInputAt: 1000 }));
+    expect(m.freezeCount).toBe(1);
+    expect(m.longestFreezeMs).toBe(FREEZE_GAP_MS + 1);
+    m = applyInput(m, ctx({ now: m.typingMs + 1000, lastInputAt: 1000 + FREEZE_GAP_MS + 1 }));
+    expect(m.freezeCount).toBe(1);
+    m = applyInput(m, ctx({ now: m.typingMs + 1000 + FREEZE_GAP_MS + 5000, lastInputAt: m.typingMs + 1000 }));
+    expect(m.freezeCount).toBe(2);
+    expect(m.longestFreezeMs).toBe(FREEZE_GAP_MS + 5000);
   });
 });

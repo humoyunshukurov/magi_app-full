@@ -29,6 +29,18 @@ text_edited: number,
  */
 text_pasted: number, 
 /**
+ * Delete operations specifically (a subset of `text_edited`).
+ */
+text_deleted: number, 
+/**
+ * Pauses longer than the freeze threshold between two inputs.
+ */
+freeze_count: number, 
+/**
+ * The longest such pause, in seconds.
+ */
+longest_freeze: number, 
+/**
  * Seconds the question was on screen.
  */
 time_spent: number, 

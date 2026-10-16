@@ -191,6 +191,9 @@ const attemptQuestionSchema = z.object({
   text_typed: z.number(),
   text_edited: z.number(),
   text_pasted: z.number(),
+  text_deleted: z.number(),
+  freeze_count: z.number(),
+  longest_freeze: z.number(),
   started_at: z.string().nullable(),
   answered_at: z.string().nullable(),
   last_synced_at: z.string().nullable(),
@@ -242,6 +245,9 @@ export interface AnswerInput {
   text_typed?: number;
   text_edited?: number;
   text_pasted?: number;
+  text_deleted?: number;
+  freeze_count?: number;
+  longest_freeze?: number;
   started_at?: string;
   answered_at?: string;
 }
@@ -258,6 +264,9 @@ export async function syncAnswers(token: string, attemptId: number, answers: Ans
       textTyped: a.text_typed,
       textEdited: a.text_edited,
       textPasted: a.text_pasted,
+      textDeleted: a.text_deleted,
+      freezeCount: a.freeze_count,
+      longestFreeze: a.longest_freeze,
       startedAt: a.started_at,
       answeredAt: a.answered_at,
     })),

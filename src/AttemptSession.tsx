@@ -50,7 +50,10 @@ function fromServer(q: Question): QuestionState {
       typed: q.text_typed,
       edited: q.text_edited,
       pasted: q.text_pasted,
+      deleted: q.text_deleted,
       typingMs: q.typing_duration * UNIT_SECONDS[q.typing_duration_unit] * 1000,
+      freezeCount: q.freeze_count,
+      longestFreezeMs: q.longest_freeze * 1000,
     },
     timeSpentMs: 0,
     startedAt: q.started_at,
@@ -64,7 +67,15 @@ function fromDraft(d: AnswerDraft): QuestionState {
   return {
     answer: d.answer,
     optionIds: d.option_ids,
-    metrics: { typed: d.text_typed, edited: d.text_edited, pasted: d.text_pasted, typingMs: d.typing_duration * 1000 },
+    metrics: {
+      typed: d.text_typed,
+      edited: d.text_edited,
+      pasted: d.text_pasted,
+      deleted: d.text_deleted,
+      typingMs: d.typing_duration * 1000,
+      freezeCount: d.freeze_count,
+      longestFreezeMs: d.longest_freeze * 1000,
+    },
     timeSpentMs: d.time_spent * 1000,
     startedAt: d.started_at,
     answeredAt: d.answered_at,
@@ -145,7 +156,7 @@ export function AttemptSession({
     const spentSeconds = Math.round(s.timeSpentMs / 1000);
     log(
       "question_summary",
-      `Question ${position}: on screen ${spentSeconds} s, typed ${s.metrics.typed}, edited ${s.metrics.edited}, pasted ${s.metrics.pasted}, typing time ${typingSeconds} s`,
+      `Question ${position}: on screen ${spentSeconds} s, typed ${s.metrics.typed}, edited ${s.metrics.edited}, deleted ${s.metrics.deleted}, pasted ${s.metrics.pasted}, typing time ${typingSeconds} s, froze ${s.metrics.freezeCount} time(s)`,
       {
         questionId: q.question_id,
         data: {
@@ -153,8 +164,11 @@ export function AttemptSession({
           position,
           typed: s.metrics.typed,
           edited: s.metrics.edited,
+          deleted: s.metrics.deleted,
           pasted: s.metrics.pasted,
           typing_seconds: typingSeconds,
+          freeze_count: s.metrics.freezeCount,
+          longest_freeze_seconds: Math.round(s.metrics.longestFreezeMs / 1000),
           time_spent_seconds: spentSeconds,
           answered: isAnswered(s),
         },
@@ -174,6 +188,9 @@ export function AttemptSession({
       text_typed: s.metrics.typed,
       text_edited: s.metrics.edited,
       text_pasted: s.metrics.pasted,
+      text_deleted: s.metrics.deleted,
+      freeze_count: s.metrics.freezeCount,
+      longest_freeze: Math.round(s.metrics.longestFreezeMs / 1000),
       time_spent: Math.round((s.timeSpentMs + live) / 1000),
       started_at: s.startedAt,
       answered_at: s.answeredAt,
@@ -194,6 +211,9 @@ export function AttemptSession({
       text_typed: s.metrics.typed,
       text_edited: s.metrics.edited,
       text_pasted: s.metrics.pasted,
+      text_deleted: s.metrics.deleted,
+      freeze_count: s.metrics.freezeCount,
+      longest_freeze: Math.round(s.metrics.longestFreezeMs / 1000),
     };
     if (TEXT_TYPES.has(q.question_type)) input.answer = s.answer;
     else input.option_ids = s.optionIds;
