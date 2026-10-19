@@ -13,6 +13,11 @@ export interface Look {
   /** Head turned sharply away from the camera - null when there isn't exactly one clear face to
    * judge it from (with zero or several faces, this isn't meaningful). */
   turned: boolean | null;
+  /** A second person-shaped object in frame, from the general object model rather than the face
+   * model - catches someone passing by whose face isn't clearly visible (back of head, side
+   * profile, half out of frame), which blaze_face alone misses. null on a look that didn't check
+   * (same cadence as the phone check, it's the same costly model). */
+  extraBody: boolean | null;
 }
 
 // BlazeFace's documented keypoint order for a face detection: right eye, left eye, nose tip,
@@ -44,7 +49,8 @@ export function headTurned(keypoints: { x: number; y: number }[]): boolean | nul
 }
 
 export interface Detector {
-  /** Finding a phone is the costly part, so it only runs when asked for. */
+  /** Finding a phone (and a second person's silhouette) is the costly part, so it only runs when
+   * asked for - one object-model pass covers both, since it's the same forward pass either way. */
   look(picture: HTMLCanvasElement, options: { phone: boolean }): Look;
   close(): void;
 }
@@ -61,23 +67,29 @@ export async function loadDetector(): Promise<Detector> {
     runningMode: "IMAGE",
     minDetectionConfidence: 0.5,
   });
+  // "person" alongside "cell phone" - one inference pass answers both, so counting a second
+  // person-shaped object costs nothing beyond what the phone check already pays for
   const objects = await ObjectDetector.createFromOptions(vision, {
     baseOptions: { modelAssetPath: `${BASE}/models/efficientdet_lite0.tflite`, delegate: "CPU" },
     canvas: document.createElement("canvas"),
     runningMode: "IMAGE",
-    categoryAllowlist: ["cell phone"],
+    categoryAllowlist: ["cell phone", "person"],
     scoreThreshold: 0.35,
-    maxResults: 1,
+    maxResults: 5,
   });
   return {
     // voice isn't this detector's job (it has no microphone) - useCameraWatch fills it in
     look: (picture, { phone }) => {
       const detections = face.detect(picture).detections;
+      const objectDetections = phone ? objects.detect(picture).detections : null;
+      const category = (d: { categories: { categoryName?: string }[] }) => d.categories[0]?.categoryName;
       return {
         faces: detections.length,
-        phone: phone ? objects.detect(picture).detections.length > 0 : null,
+        phone: objectDetections ? objectDetections.some((d) => category(d) === "cell phone") : null,
         voice: null,
         turned: detections.length === 1 ? headTurned(detections[0]!.keypoints) : null,
+        // the primary student is a "person" too - this needs a second one to mean anything
+        extraBody: objectDetections ? objectDetections.filter((d) => category(d) === "person").length >= 2 : null,
       };
     },
     close: () => {
@@ -96,7 +108,7 @@ export type Verdict =
   | { kind: "looking_away"; detail: string };
 
 /** How long nobody may be in front of the camera before it counts as leaving. */
-export const AWAY_MS = 3000;
+export const AWAY_MS = 2000;
 /** Phone-check results worth remembering at once, oldest first. */
 const PHONE_WINDOW = 3;
 /** Hits needed within that window to believe there is a phone - out of the last PHONE_WINDOW
@@ -167,12 +179,16 @@ export function createJudge() {
         away = false;
       }
 
-      if (look.faces > 1) {
+      // either the face model sees a second face, or the (slower) object model sees a second
+      // person-shaped thing when the face model couldn't - catches a passerby face-on detection
+      // missed (back of head, side profile, half out of frame)
+      if (look.faces > 1 || look.extraBody) {
         extraPersonLooks += 1;
         extraPersonClearLooks = 0;
         if (extraPersonLooks >= EXTRA_PERSON_LOOKS && !extraPersonReported) {
           extraPersonReported = true;
-          verdicts.push({ kind: "extra_person", detail: `${look.faces} faces in view of the camera` });
+          const detail = look.faces > 1 ? `${look.faces} faces in view of the camera` : "Someone else's shape seen in the background";
+          verdicts.push({ kind: "extra_person", detail });
         }
       } else {
         extraPersonLooks = 0;

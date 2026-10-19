@@ -36,12 +36,13 @@ describe("headTurned", () => {
   });
 });
 
-const face: Look = { faces: 1, phone: false, voice: null, turned: false };
-const nobody: Look = { faces: 0, phone: false, voice: null, turned: null };
-const phone: Look = { faces: 1, phone: true, voice: null, turned: false };
-const twoFaces: Look = { faces: 2, phone: false, voice: null, turned: null };
-const talking: Look = { faces: 2, phone: false, voice: true, turned: null };
-const turnedAway: Look = { faces: 1, phone: false, voice: null, turned: true };
+const face: Look = { faces: 1, phone: false, voice: null, turned: false, extraBody: null };
+const nobody: Look = { faces: 0, phone: false, voice: null, turned: null, extraBody: null };
+const phone: Look = { faces: 1, phone: true, voice: null, turned: false, extraBody: null };
+const twoFaces: Look = { faces: 2, phone: false, voice: null, turned: null, extraBody: null };
+const talking: Look = { faces: 2, phone: false, voice: true, turned: null, extraBody: null };
+const turnedAway: Look = { faces: 1, phone: false, voice: null, turned: true, extraBody: null };
+const bodySeen: Look = { faces: 1, phone: false, voice: null, turned: false, extraBody: true };
 
 describe("createJudge, being away from the camera", () => {
   it("says nothing while somebody is in front of the camera", () => {
@@ -139,14 +140,14 @@ describe("createJudge, a phone", () => {
   it("keeps counting across looks that didn't check for a phone", () => {
     const judge = createJudge();
     judge.feed(phone, 0);
-    expect(judge.feed({ faces: 1, phone: null, voice: null, turned: null }, 1000)).toEqual([]);
+    expect(judge.feed({ faces: 1, phone: null, voice: null, turned: null, extraBody: null }, 1000)).toEqual([]);
     expect(judge.feed(phone, 2000)).toHaveLength(1);
   });
 
   it("still notices somebody leaving on a look that didn't check for a phone", () => {
     const judge = createJudge();
-    judge.feed({ faces: 0, phone: null, voice: null, turned: null }, 0);
-    expect(judge.feed({ faces: 0, phone: null, voice: null, turned: null }, AWAY_MS)).toHaveLength(1);
+    judge.feed({ faces: 0, phone: null, voice: null, turned: null, extraBody: null }, 0);
+    expect(judge.feed({ faces: 0, phone: null, voice: null, turned: null, extraBody: null }, AWAY_MS)).toHaveLength(1);
   });
 });
 
@@ -179,8 +180,19 @@ describe("createJudge, an extra person", () => {
 
   it("is independent of the camera-away and phone checks", () => {
     const judge = createJudge();
-    expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null }, 0)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
-    expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null }, 2000)).toEqual([{ kind: "phone_seen", detail: "A phone is in view of the camera" }]);
+    expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null, extraBody: null }, 0)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
+    expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null, extraBody: null }, 2000)).toEqual([{ kind: "phone_seen", detail: "A phone is in view of the camera" }]);
+  });
+
+  it("also reports it from a second person-shaped object, when the face model saw only one face", () => {
+    const judge = createJudge();
+    expect(judge.feed(bodySeen, 0)).toEqual([{ kind: "extra_person", detail: "Someone else's shape seen in the background" }]);
+  });
+
+  it("doesn't report a body seen alone without it being a second one (the student is a body too)", () => {
+    const judge = createJudge();
+    const soloBody: Look = { faces: 1, phone: false, voice: null, turned: false, extraBody: false };
+    expect(judge.feed(soloBody, 0)).toEqual([]);
   });
 });
 
@@ -203,7 +215,7 @@ describe("createJudge, talking", () => {
 
   it("doesn't report voice activity alone, without a second face", () => {
     const judge = createJudge();
-    const soloVoice: Look = { faces: 1, phone: false, voice: true, turned: null };
+    const soloVoice: Look = { faces: 1, phone: false, voice: true, turned: null, extraBody: null };
     for (let t = 0; t < 3000; t += 500) expect(talks(judge.feed(soloVoice, t))).toBe(false);
   });
 
