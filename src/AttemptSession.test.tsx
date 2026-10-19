@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AttemptSession, SYNC_IDLE_MS, type AttemptView } from "./AttemptSession";
-import { syncAnswers, submitAttempt } from "./api";
+import { syncAnswers, submitAttempt, getAttempt } from "./api";
 import { activityLog, appQuit, cameraStart, draftClear, draftLoad, draftSave, environmentCheck, examLock, linkClose, linkOpen, onCloseAttempt, onLinkBlocked, onLinkClosed, onLinkFocus, onWindowFocusChanged, screenshotTake } from "./ipc";
 import { LINK_GRACE_MS, POLL_MS, QUIT_DELAY_MS, SHOT_DELAY_MS, SHOT_GAP_MS, SHOT_LIMIT } from "./useExamGuard";
 
@@ -273,6 +273,47 @@ describe("AttemptSession", () => {
     expect(submitAttempt).not.toHaveBeenCalled();
     expect(onFinished).not.toHaveBeenCalled();
     expect(screen.getByText(/Couldn't save your answers/)).toBeTruthy();
+  });
+
+  it("still finishes a manual submit whose response was lost, if the server actually graded it", async () => {
+    vi.mocked(submitAttempt).mockRejectedValue(new Error("network blip"));
+    vi.mocked(getAttempt).mockResolvedValue(finished);
+    const onFinished = renderSession();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit attempt" }));
+    await flush();
+
+    expect(getAttempt).toHaveBeenCalledWith("tok", 77);
+    expect(onFinished).toHaveBeenCalledWith(finished, undefined);
+    expect(draftClear).toHaveBeenCalledWith(77);
+    expect(screen.queryByText(/network blip/)).toBeNull();
+  });
+
+  it("doesn't finish a manual submit whose response was lost, if the attempt is still genuinely open", async () => {
+    vi.mocked(submitAttempt).mockRejectedValue(new Error("network blip"));
+    vi.mocked(getAttempt).mockResolvedValue(attempt()); // still "in_progress" server-side
+    const onFinished = renderSession();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit attempt" }));
+    await flush();
+
+    expect(onFinished).not.toHaveBeenCalled();
+    expect(screen.getByText(/network blip/)).toBeTruthy();
+  });
+
+  it("shows the original error when the recovery check itself also fails", async () => {
+    vi.mocked(submitAttempt).mockRejectedValue(new Error("network blip"));
+    vi.mocked(getAttempt).mockRejectedValue(new Error("still offline"));
+    const onFinished = renderSession();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit attempt" }));
+    await flush();
+
+    expect(onFinished).not.toHaveBeenCalled();
+    expect(screen.getByText(/network blip/)).toBeTruthy();
   });
 
   it("shows a countdown", async () => {

@@ -29,6 +29,9 @@ const TYPE_LABEL: Record<Question["question_type"], string> = {
   essay: "essay",
 };
 const UNIT_SECONDS: Record<TimeUnit, number> = { seconds: 1, minutes: 60, hours: 3600, days: 86400 };
+// a submit that actually reached the server leaves the attempt in one of these - used to tell a
+// genuinely-failed submit apart from one whose response was merely lost in transit
+const DONE_STATUSES = new Set<AttemptSummary["status"]>(["submitted", "auto_submitted", "graded"]);
 
 interface QuestionState {
   answer: string;
@@ -345,17 +348,23 @@ export function AttemptSession({
       logSubmitted();
       finish(result, auto ? reason : undefined);
     } catch (err) {
-      if (auto) {
-        // The server closes an attempt whose time ran out by itself; ask for its final state.
-        try {
-          const result = await getAttempt(token, attempt.id);
+      // The submit may have actually gone through server-side even though this response was
+      // lost (network blip, timeout, the app losing focus mid-request) - check the real state
+      // before telling the student it failed and leaving them stuck in the locked exam window
+      // with a submit that already succeeded. Only trust it as done if the server agrees the
+      // attempt is no longer open - an attempt still genuinely in progress must not be ended
+      // client-side just because this one request failed.
+      try {
+        const result = await getAttempt(token, attempt.id);
+        if (DONE_STATUSES.has(result.status)) {
           logSubmitted();
-          finish(result, reason);
+          finish(result, auto ? reason : undefined);
           return;
-        } catch {
-          // fall through to the error below
         }
+      } catch {
+        // fall through to the error below - the recovery check itself failed too
       }
+
       submitInFlight.current = false;
       setSubmitting(false);
       const message = err instanceof ApiError ? err.message : String(err);
