@@ -1,12 +1,15 @@
 // Looks at the camera picture for what matters during an exam: a phone in view, nobody in front
-// of the camera, and more than one face in it. Everything runs on this computer (MediaPipe, from
-// the app's own files); no picture leaves it.
+// of the camera, more than one face in it, and (from the microphone, not the picture) whether
+// there's voice activity while that second face is there. Everything runs on this computer
+// (MediaPipe for video, the Web Audio API for voice level); no picture or audio ever leaves it.
 
-/** What one look at the camera picture found. */
+/** What one look at the camera (and, for voice, the microphone) found. */
 export interface Look {
   faces: number;
   /** null when this look didn't check for a phone */
   phone: boolean | null;
+  /** null when there's no microphone to check */
+  voice: boolean | null;
 }
 
 export interface Detector {
@@ -36,9 +39,11 @@ export async function loadDetector(): Promise<Detector> {
     maxResults: 1,
   });
   return {
+    // voice isn't this detector's job (it has no microphone) - useCameraWatch fills it in
     look: (picture, { phone }) => ({
       faces: face.detect(picture).detections.length,
       phone: phone ? objects.detect(picture).detections.length > 0 : null,
+      voice: null,
     }),
     close: () => {
       face.close();
@@ -51,11 +56,17 @@ export type Verdict =
   | { kind: "camera_away"; detail: string }
   | { kind: "camera_back"; detail: string; awaySeconds: number }
   | { kind: "phone_seen"; detail: string }
-  | { kind: "extra_person"; detail: string };
+  | { kind: "extra_person"; detail: string }
+  | { kind: "talking"; detail: string };
 
 /** How long nobody may be in front of the camera before it counts as leaving. */
 export const AWAY_MS = 3000;
-/** Looks in a row that must show a phone, so one wrong guess doesn't count. */
+/** Phone-check results worth remembering at once, oldest first. */
+const PHONE_WINDOW = 3;
+/** Hits needed within that window to believe there is a phone - out of the last PHONE_WINDOW
+ * checks, not strictly back to back, so one flaky miss from the model doesn't throw away a real
+ * detection (object detection on a phone held at an angle or partly out of frame is not perfectly
+ * consistent look to look). */
 const PHONE_LOOKS = 2;
 /** Looks in a row without a phone before a phone can be reported again. */
 const PHONE_GONE_LOOKS = 3;
@@ -65,18 +76,30 @@ const PHONE_COOLDOWN_MS = 10_000;
 const EXTRA_PERSON_LOOKS = 1;
 /** Looks in a row back down to one face before an extra person can be reported again. */
 const EXTRA_PERSON_GONE_LOOKS = 2;
+/** Looks in a row with a second face AND voice activity at once, at 500ms each - about 1.5s of
+ * an actual back-and-forth, not a cough or a one-off word that happened to overlap with someone
+ * passing by. */
+const TALKING_LOOKS = 3;
+/** Looks in a row without that combination before talking can be reported again. */
+const TALKING_GONE_LOOKS = 3;
+/** The same thing isn't reported again this soon - a single conversation shouldn't spam incidents. */
+const TALKING_COOLDOWN_MS = 15_000;
 
 /** Turns a stream of looks into the few things worth writing down. */
 export function createJudge() {
   let missingSince: number | null = null;
   let away = false;
-  let phoneLooks = 0;
+  const phoneWindow: boolean[] = [];
   let phoneReported = false;
   let clearLooks = PHONE_GONE_LOOKS;
   let lastPhoneAt = -Infinity;
   let extraPersonLooks = 0;
   let extraPersonReported = false;
   let extraPersonClearLooks = EXTRA_PERSON_GONE_LOOKS;
+  let talkingLooks = 0;
+  let talkingReported = false;
+  let talkingClearLooks = TALKING_GONE_LOOKS;
+  let lastTalkingAt = -Infinity;
 
   return {
     feed(look: Look, now: number): Verdict[] {
@@ -110,19 +133,38 @@ export function createJudge() {
         if (extraPersonClearLooks >= EXTRA_PERSON_GONE_LOOKS) extraPersonReported = false;
       }
 
+      // independent of extra_person's own report/cooldown above - this tracks the current
+      // moment's condition (second face + voice) directly, not whether extra_person already fired
+      if (look.faces > 1 && look.voice) {
+        talkingLooks += 1;
+        talkingClearLooks = 0;
+        if (talkingLooks >= TALKING_LOOKS && !talkingReported && now - lastTalkingAt >= TALKING_COOLDOWN_MS) {
+          talkingReported = true;
+          lastTalkingAt = now;
+          verdicts.push({ kind: "talking", detail: "Talking with someone next to the camera" });
+        }
+      } else {
+        talkingLooks = 0;
+        talkingClearLooks += 1;
+        if (talkingClearLooks >= TALKING_GONE_LOOKS) talkingReported = false;
+      }
+
       if (look.phone === null) {
         return verdicts;
       }
+
+      phoneWindow.push(look.phone);
+      if (phoneWindow.length > PHONE_WINDOW) phoneWindow.shift();
+      const phoneHits = phoneWindow.filter(Boolean).length;
+
       if (look.phone) {
-        phoneLooks += 1;
         clearLooks = 0;
-        if (phoneLooks >= PHONE_LOOKS && !phoneReported && now - lastPhoneAt >= PHONE_COOLDOWN_MS) {
+        if (phoneHits >= PHONE_LOOKS && !phoneReported && now - lastPhoneAt >= PHONE_COOLDOWN_MS) {
           phoneReported = true;
           lastPhoneAt = now;
           verdicts.push({ kind: "phone_seen", detail: "A phone is in view of the camera" });
         }
       } else {
-        phoneLooks = 0;
         clearLooks += 1;
         if (clearLooks >= PHONE_GONE_LOOKS) phoneReported = false;
       }

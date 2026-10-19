@@ -30,7 +30,7 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);
   vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(PHOTO);
   looks = [];
-  detector.look.mockImplementation(() => looks.shift() ?? { faces: 1, phone: false });
+  detector.look.mockImplementation(() => looks.shift() ?? { faces: 1, phone: false, voice: null });
   vi.mocked(loadDetector).mockResolvedValue(detector);
 });
 
@@ -42,7 +42,7 @@ afterEach(() => {
 
 describe("useCameraWatch", () => {
   it("takes a photo and reports it when nobody has been in front of the camera for a few seconds", async () => {
-    looks = [{ faces: 0, phone: false }, { faces: 0, phone: null }, { faces: 0, phone: false }, { faces: 0, phone: null }];
+    looks = [{ faces: 0, phone: false, voice: null }, { faces: 0, phone: null, voice: null }, { faces: 0, phone: false, voice: null }, { faces: 0, phone: null, voice: null }];
     watch();
     await advance(TICK_MS * 3); // the first look is right away, then one a second
 
@@ -51,7 +51,7 @@ describe("useCameraWatch", () => {
   });
 
   it("says how long it was when the student comes back", async () => {
-    looks = [{ faces: 0, phone: false }, { faces: 0, phone: null }, { faces: 0, phone: false }, { faces: 0, phone: null }, { faces: 1, phone: false }];
+    looks = [{ faces: 0, phone: false, voice: null }, { faces: 0, phone: null, voice: null }, { faces: 0, phone: false, voice: null }, { faces: 0, phone: null, voice: null }, { faces: 1, phone: false, voice: null }];
     watch();
     await advance(TICK_MS * 6);
 
@@ -59,7 +59,7 @@ describe("useCameraWatch", () => {
   });
 
   it("takes a photo when a phone is in view on two looks in a row", async () => {
-    looks = [{ faces: 1, phone: true }, { faces: 1, phone: null }, { faces: 1, phone: true }];
+    looks = [{ faces: 1, phone: true, voice: null }, { faces: 1, phone: null, voice: null }, { faces: 1, phone: true, voice: null }];
     watch();
     await advance(TICK_MS * 3);
 
@@ -67,7 +67,7 @@ describe("useCameraWatch", () => {
   });
 
   it("takes a photo when a second face is seen", async () => {
-    looks = [{ faces: 2, phone: false }];
+    looks = [{ faces: 2, phone: false, voice: null }];
     watch();
     await advance(TICK_MS);
 
@@ -77,11 +77,11 @@ describe("useCameraWatch", () => {
   it("gives each event kind its own photo budget, so a flood of one kind can't starve another", async () => {
     // faces=2 reports extra_person with a photo, then two faces=1 looks clear it so it can
     // fire again - repeated one more time than the budget allows
-    const extraPersonCycle: Look[] = [{ faces: 2, phone: false }, { faces: 1, phone: false }, { faces: 1, phone: false }];
+    const extraPersonCycle: Look[] = [{ faces: 2, phone: false, voice: null }, { faces: 1, phone: false, voice: null }, { faces: 1, phone: false, voice: null }];
     looks = [
       ...Array.from({ length: PHOTO_LIMIT + 1 }, () => extraPersonCycle).flat(),
-      { faces: 1, phone: true },
-      { faces: 1, phone: true },
+      { faces: 1, phone: true, voice: null },
+      { faces: 1, phone: true, voice: null },
     ];
     watch();
     await advance(TICK_MS * (looks.length + 2));
@@ -95,11 +95,11 @@ describe("useCameraWatch", () => {
     expect(onEvent).toHaveBeenCalledWith("phone_seen", "A phone is in view of the camera", { image: PHOTO });
   });
 
-  it("looks for a phone on every other look only, since that is the slow part", async () => {
+  it("looks for a phone on every 4th look only, since that is the slow part", async () => {
     watch();
     await advance(TICK_MS * 4);
 
-    expect(detector.look.mock.calls.map(([, options]) => options.phone)).toEqual([true, false, true, false, true]);
+    expect(detector.look.mock.calls.map(([, options]) => options.phone)).toEqual([true, false, false, false, true]);
   });
 
   it("draws the picture at a size the detector can use", async () => {

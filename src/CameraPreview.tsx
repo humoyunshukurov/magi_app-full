@@ -4,9 +4,10 @@
 import { useRef, useState } from "react";
 import { CameraPicture, useCamera, type CameraEventKind } from "./useCamera";
 import { useCameraWatch, type WatchEventKind } from "./useCameraWatch";
+import { useMicrophone, type MicEventKind } from "./useMicrophone";
 
 export type { CameraEventKind };
-export type PreviewEventKind = CameraEventKind | WatchEventKind;
+export type PreviewEventKind = CameraEventKind | WatchEventKind | MicEventKind;
 
 const TILE_WIDTH = 160;
 const TILE_HEIGHT = 120;
@@ -22,11 +23,13 @@ export function CameraPreview({
   onEvent: (kind: PreviewEventKind, detail: string, data?: Record<string, unknown>) => void;
 }) {
   const camera = useCamera(onEvent);
+  const mic = useMicrophone(onEvent);
 
   useCameraWatch(
     () => (camera.source === "app" ? camera.image.current : camera.video.current),
     camera.source !== null && camera.problem === null,
     onEvent,
+    mic.isSpeaking,
   );
 
   // The tile can be dragged anywhere the student likes (it can sit over the text they're

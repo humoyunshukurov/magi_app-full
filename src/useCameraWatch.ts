@@ -4,12 +4,16 @@
 import { useEffect, useRef } from "react";
 import { createJudge, loadDetector } from "./cameraWatch";
 
-export type WatchEventKind = "phone_seen" | "camera_away" | "camera_back" | "camera_checks_off" | "extra_person";
+export type WatchEventKind = "phone_seen" | "camera_away" | "camera_back" | "camera_checks_off" | "extra_person" | "talking";
 type Picture = HTMLVideoElement | HTMLImageElement;
 
-export const TICK_MS = 1000;
-/** Looking for a phone is the slow part, so it happens on every other look. */
-const PHONE_EVERY = 2;
+// Halved from 1000ms: a person walking past in the background, or stepping up beside the
+// student, can cross the frame in well under a second - sampling twice as often catches far more
+// of those than the face model's own miss rate alone would explain.
+export const TICK_MS = 500;
+// Looking for a phone is the slow part, so it happens less often than every look - kept at the
+// same real-world cadence as before (every 2s) despite the faster tick, by doubling the stride.
+const PHONE_EVERY = 4;
 /** Photos are kept on this computer, so there is a cap per exam - per event kind, so a run of
  * camera_away/extra_person events (an easily-flaked face read) can't use up the budget a genuine
  * phone_seen later in the exam would otherwise get. */
@@ -25,11 +29,15 @@ export function useCameraWatch(
   picture: () => Picture | null,
   running: boolean,
   onEvent: (kind: WatchEventKind, detail: string, data: Record<string, unknown>) => void,
+  /** Omitted (or returning false) when there's no microphone - "talking" just never fires. */
+  isSpeaking?: () => boolean,
 ) {
   const pictureRef = useRef(picture);
   pictureRef.current = picture;
   const report = useRef(onEvent);
   report.current = onEvent;
+  const speaking = useRef(isSpeaking);
+  speaking.current = isSpeaking;
 
   useEffect(() => {
     if (!running) return;
@@ -50,7 +58,8 @@ export function useCameraWatch(
         canvas.height = Math.round(size.h * scale);
         try {
           canvas.getContext("2d")?.drawImage(source, 0, 0, canvas.width, canvas.height);
-          const look = detector.look(canvas, { phone: looks % PHONE_EVERY === 0 });
+          const videoLook = detector.look(canvas, { phone: looks % PHONE_EVERY === 0 });
+          const look = { ...videoLook, voice: speaking.current ? speaking.current() : null };
           looks += 1;
           for (const verdict of judge.feed(look, Date.now())) {
             if (verdict.kind === "camera_back") {
