@@ -320,6 +320,7 @@ const cheatingTypeSchema = z.enum([
   "app_closed",
   "extra_person",
   "talking",
+  "looking_away",
 ]);
 export type CheatingType = z.infer<typeof cheatingTypeSchema>;
 

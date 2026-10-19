@@ -4,7 +4,7 @@
 import { useEffect, useRef } from "react";
 import { createJudge, loadDetector } from "./cameraWatch";
 
-export type WatchEventKind = "phone_seen" | "camera_away" | "camera_back" | "camera_checks_off" | "extra_person" | "talking";
+export type WatchEventKind = "phone_seen" | "camera_away" | "camera_back" | "camera_checks_off" | "extra_person" | "talking" | "looking_away";
 type Picture = HTMLVideoElement | HTMLImageElement;
 
 // Halved from 1000ms: a person walking past in the background, or stepping up beside the

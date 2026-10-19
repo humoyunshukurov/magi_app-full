@@ -10,6 +10,37 @@ export interface Look {
   phone: boolean | null;
   /** null when there's no microphone to check */
   voice: boolean | null;
+  /** Head turned sharply away from the camera - null when there isn't exactly one clear face to
+   * judge it from (with zero or several faces, this isn't meaningful). */
+  turned: boolean | null;
+}
+
+// BlazeFace's documented keypoint order for a face detection: right eye, left eye, nose tip,
+// mouth center, right ear tragion, left ear tragion (in image space, not mirrored).
+const RIGHT_EYE = 0;
+const LEFT_EYE = 1;
+const NOSE_TIP = 2;
+
+/** The eyes are too close together in the frame (small, far away, or a bad angle) to trust the
+ * nose-offset estimate below at all. */
+const MIN_EYE_SPAN = 0.02;
+/** How far off-center (0 = at the right eye, 1 = at the left eye, 0.5 = centered) the nose can
+ * sit before this counts as a sharp turn, not just an ordinary head angle while thinking/reading. */
+const TURN_LOW = 0.28;
+const TURN_HIGH = 0.72;
+
+/** A rough yaw estimate from the detector's own keypoints - no extra model, no extra cost, just
+ * reading more of what BlazeFace already computed. Approximate by nature (no real 3D head pose),
+ * which is why the judge below still demands this hold for several looks in a row. */
+export function headTurned(keypoints: { x: number; y: number }[]): boolean | null {
+  const rightEye = keypoints[RIGHT_EYE];
+  const leftEye = keypoints[LEFT_EYE];
+  const nose = keypoints[NOSE_TIP];
+  if (!rightEye || !leftEye || !nose) return null;
+  const eyeSpan = leftEye.x - rightEye.x;
+  if (Math.abs(eyeSpan) < MIN_EYE_SPAN) return null;
+  const noseOffset = (nose.x - rightEye.x) / eyeSpan;
+  return noseOffset < TURN_LOW || noseOffset > TURN_HIGH;
 }
 
 export interface Detector {
@@ -40,11 +71,15 @@ export async function loadDetector(): Promise<Detector> {
   });
   return {
     // voice isn't this detector's job (it has no microphone) - useCameraWatch fills it in
-    look: (picture, { phone }) => ({
-      faces: face.detect(picture).detections.length,
-      phone: phone ? objects.detect(picture).detections.length > 0 : null,
-      voice: null,
-    }),
+    look: (picture, { phone }) => {
+      const detections = face.detect(picture).detections;
+      return {
+        faces: detections.length,
+        phone: phone ? objects.detect(picture).detections.length > 0 : null,
+        voice: null,
+        turned: detections.length === 1 ? headTurned(detections[0]!.keypoints) : null,
+      };
+    },
     close: () => {
       face.close();
       objects.close();
@@ -57,7 +92,8 @@ export type Verdict =
   | { kind: "camera_back"; detail: string; awaySeconds: number }
   | { kind: "phone_seen"; detail: string }
   | { kind: "extra_person"; detail: string }
-  | { kind: "talking"; detail: string };
+  | { kind: "talking"; detail: string }
+  | { kind: "looking_away"; detail: string };
 
 /** How long nobody may be in front of the camera before it counts as leaving. */
 export const AWAY_MS = 3000;
@@ -84,6 +120,13 @@ const TALKING_LOOKS = 3;
 const TALKING_GONE_LOOKS = 3;
 /** The same thing isn't reported again this soon - a single conversation shouldn't spam incidents. */
 const TALKING_COOLDOWN_MS = 15_000;
+/** Looks in a row with the head turned sharply away, at 500ms each - a couple of seconds of it,
+ * not a quick glance to the side while thinking. */
+const LOOKING_AWAY_LOOKS = 4;
+/** Looks in a row facing forward again before this can be reported again. */
+const LOOKING_AWAY_GONE_LOOKS = 3;
+/** The same thing isn't reported again this soon. */
+const LOOKING_AWAY_COOLDOWN_MS = 15_000;
 
 /** Turns a stream of looks into the few things worth writing down. */
 export function createJudge() {
@@ -100,6 +143,10 @@ export function createJudge() {
   let talkingReported = false;
   let talkingClearLooks = TALKING_GONE_LOOKS;
   let lastTalkingAt = -Infinity;
+  let turnedLooks = 0;
+  let turnedReported = false;
+  let turnedClearLooks = LOOKING_AWAY_GONE_LOOKS;
+  let lastTurnedAt = -Infinity;
 
   return {
     feed(look: Look, now: number): Verdict[] {
@@ -147,6 +194,24 @@ export function createJudge() {
         talkingLooks = 0;
         talkingClearLooks += 1;
         if (talkingClearLooks >= TALKING_GONE_LOOKS) talkingReported = false;
+      }
+
+      // null (not exactly one clear face) leaves this alone rather than resetting it - a brief
+      // overlap with someone passing by shouldn't throw away an otherwise sustained turn
+      if (look.turned !== null) {
+        if (look.turned) {
+          turnedLooks += 1;
+          turnedClearLooks = 0;
+          if (turnedLooks >= LOOKING_AWAY_LOOKS && !turnedReported && now - lastTurnedAt >= LOOKING_AWAY_COOLDOWN_MS) {
+            turnedReported = true;
+            lastTurnedAt = now;
+            verdicts.push({ kind: "looking_away", detail: "Looked sharply away from the camera" });
+          }
+        } else {
+          turnedLooks = 0;
+          turnedClearLooks += 1;
+          if (turnedClearLooks >= LOOKING_AWAY_GONE_LOOKS) turnedReported = false;
+        }
       }
 
       if (look.phone === null) {

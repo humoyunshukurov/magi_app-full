@@ -31,6 +31,7 @@ export type ActivityKind =
   | "mic_failed"
   | "phone_seen"
   | "talking"
+  | "looking_away"
   | "devtools_attempt"
   | "monitor_added"
   | "monitor_removed"
@@ -66,10 +67,11 @@ const CHEATING_KIND: Partial<Record<ActivityKind, CheatingType>> = {
   phone_seen: "phone_seen",
   extra_person: "extra_person",
   talking: "talking",
+  looking_away: "looking_away",
 };
 
 // kinds whose `data.image` is a suspicious-moment photo worth keeping on the server too
-const PHOTO_KIND = new Set<ActivityKind>(["phone_seen", "camera_away", "extra_person", "talking", "screenshot"]);
+const PHOTO_KIND = new Set<ActivityKind>(["phone_seen", "camera_away", "extra_person", "talking", "looking_away", "screenshot"]);
 
 // a proctoring sync (cheating report, snapshot upload) is worth one retry after a transient
 // network blip before giving up - still fire-and-forget from the caller's point of view

@@ -1,11 +1,47 @@
 import { describe, expect, it } from "vitest";
-import { AWAY_MS, createJudge, type Look } from "./cameraWatch";
+import { AWAY_MS, createJudge, headTurned, type Look } from "./cameraWatch";
 
-const face: Look = { faces: 1, phone: false, voice: null };
-const nobody: Look = { faces: 0, phone: false, voice: null };
-const phone: Look = { faces: 1, phone: true, voice: null };
-const twoFaces: Look = { faces: 2, phone: false, voice: null };
-const talking: Look = { faces: 2, phone: false, voice: true };
+// BlazeFace's keypoint order: [right eye, left eye, nose tip, mouth, right ear, left ear] - only
+// the first three matter here, the rest can be anything.
+const keypoints = (rightEyeX: number, leftEyeX: number, noseX: number) => [
+  { x: rightEyeX, y: 0.4 },
+  { x: leftEyeX, y: 0.4 },
+  { x: noseX, y: 0.5 },
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+];
+
+describe("headTurned", () => {
+  it("says no when the nose sits centered between the eyes", () => {
+    expect(headTurned(keypoints(0.3, 0.5, 0.4))).toBe(false);
+  });
+
+  it("says yes when the nose has shifted toward one eye", () => {
+    expect(headTurned(keypoints(0.3, 0.5, 0.32))).toBe(true);
+    expect(headTurned(keypoints(0.3, 0.5, 0.48))).toBe(true);
+  });
+
+  it("tolerates an ordinary head angle short of a sharp turn", () => {
+    expect(headTurned(keypoints(0.3, 0.5, 0.38))).toBe(false);
+    expect(headTurned(keypoints(0.3, 0.5, 0.42))).toBe(false);
+  });
+
+  it("says unknown when the eyes are too close together to trust", () => {
+    expect(headTurned(keypoints(0.5, 0.505, 0.5))).toBe(null);
+  });
+
+  it("says unknown when a keypoint is missing", () => {
+    expect(headTurned([{ x: 0.3, y: 0.4 }])).toBe(null);
+  });
+});
+
+const face: Look = { faces: 1, phone: false, voice: null, turned: false };
+const nobody: Look = { faces: 0, phone: false, voice: null, turned: null };
+const phone: Look = { faces: 1, phone: true, voice: null, turned: false };
+const twoFaces: Look = { faces: 2, phone: false, voice: null, turned: null };
+const talking: Look = { faces: 2, phone: false, voice: true, turned: null };
+const turnedAway: Look = { faces: 1, phone: false, voice: null, turned: true };
 
 describe("createJudge, being away from the camera", () => {
   it("says nothing while somebody is in front of the camera", () => {
@@ -103,14 +139,14 @@ describe("createJudge, a phone", () => {
   it("keeps counting across looks that didn't check for a phone", () => {
     const judge = createJudge();
     judge.feed(phone, 0);
-    expect(judge.feed({ faces: 1, phone: null, voice: null }, 1000)).toEqual([]);
+    expect(judge.feed({ faces: 1, phone: null, voice: null, turned: null }, 1000)).toEqual([]);
     expect(judge.feed(phone, 2000)).toHaveLength(1);
   });
 
   it("still notices somebody leaving on a look that didn't check for a phone", () => {
     const judge = createJudge();
-    judge.feed({ faces: 0, phone: null, voice: null }, 0);
-    expect(judge.feed({ faces: 0, phone: null, voice: null }, AWAY_MS)).toHaveLength(1);
+    judge.feed({ faces: 0, phone: null, voice: null, turned: null }, 0);
+    expect(judge.feed({ faces: 0, phone: null, voice: null, turned: null }, AWAY_MS)).toHaveLength(1);
   });
 });
 
@@ -143,8 +179,8 @@ describe("createJudge, an extra person", () => {
 
   it("is independent of the camera-away and phone checks", () => {
     const judge = createJudge();
-    expect(judge.feed({ faces: 2, phone: true, voice: null }, 0)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
-    expect(judge.feed({ faces: 2, phone: true, voice: null }, 2000)).toEqual([{ kind: "phone_seen", detail: "A phone is in view of the camera" }]);
+    expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null }, 0)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
+    expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null }, 2000)).toEqual([{ kind: "phone_seen", detail: "A phone is in view of the camera" }]);
   });
 });
 
@@ -167,7 +203,7 @@ describe("createJudge, talking", () => {
 
   it("doesn't report voice activity alone, without a second face", () => {
     const judge = createJudge();
-    const soloVoice: Look = { faces: 1, phone: false, voice: true };
+    const soloVoice: Look = { faces: 1, phone: false, voice: true, turned: null };
     for (let t = 0; t < 3000; t += 500) expect(talks(judge.feed(soloVoice, t))).toBe(false);
   });
 
@@ -191,5 +227,60 @@ describe("createJudge, talking", () => {
     judge.feed(talking, 20_000);
     judge.feed(talking, 20_500);
     expect(judge.feed(talking, 21_000)).toContainEqual({ kind: "talking", detail: "Talking with someone next to the camera" });
+  });
+});
+
+const looksAway = (verdicts: { kind: string }[]) => verdicts.some((v) => v.kind === "looking_away");
+
+describe("createJudge, looking away", () => {
+  it("reports after a few looks turned sharply away in a row", () => {
+    const judge = createJudge();
+    expect(looksAway(judge.feed(turnedAway, 0))).toBe(false);
+    expect(looksAway(judge.feed(turnedAway, 500))).toBe(false);
+    expect(looksAway(judge.feed(turnedAway, 1000))).toBe(false);
+    expect(judge.feed(turnedAway, 1500)).toContainEqual({ kind: "looking_away", detail: "Looked sharply away from the camera" });
+  });
+
+  it("doesn't report a single glance, it resets as soon as they face forward again", () => {
+    const judge = createJudge();
+    judge.feed(turnedAway, 0);
+    judge.feed(turnedAway, 500);
+    judge.feed(face, 1000);
+    expect(looksAway(judge.feed(turnedAway, 1500))).toBe(false);
+  });
+
+  it("doesn't count a look where turned is unknown (no single clear face), but doesn't reset either", () => {
+    const judge = createJudge();
+    judge.feed(turnedAway, 0);
+    judge.feed(turnedAway, 500);
+    judge.feed(twoFaces, 1000); // turned: null - momentary overlap, not a reason to start over
+    judge.feed(turnedAway, 1500);
+    expect(judge.feed(turnedAway, 2000)).toContainEqual({ kind: "looking_away", detail: "Looked sharply away from the camera" });
+  });
+
+  it("doesn't report it again within the cooldown, even if it flickers", () => {
+    const judge = createJudge();
+    judge.feed(turnedAway, 0);
+    judge.feed(turnedAway, 500);
+    judge.feed(turnedAway, 1000);
+    judge.feed(turnedAway, 1500);
+    judge.feed(face, 2000);
+    judge.feed(turnedAway, 2500);
+    judge.feed(turnedAway, 3000);
+    judge.feed(turnedAway, 3500);
+    expect(looksAway(judge.feed(turnedAway, 4000))).toBe(false);
+  });
+
+  it("reports it again once they've faced forward for a while, turned away again, and the cooldown has passed", () => {
+    const judge = createJudge();
+    judge.feed(turnedAway, 0);
+    judge.feed(turnedAway, 500);
+    judge.feed(turnedAway, 1000);
+    judge.feed(turnedAway, 1500);
+    for (const t of [2000, 2500, 3000]) judge.feed(face, t);
+    judge.feed(turnedAway, 20_000);
+    judge.feed(turnedAway, 20_500);
+    judge.feed(turnedAway, 21_000);
+    expect(judge.feed(turnedAway, 21_500)).toContainEqual({ kind: "looking_away", detail: "Looked sharply away from the camera" });
   });
 });
