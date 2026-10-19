@@ -70,6 +70,17 @@ function signIn() {
 }
 
 describe("AuthPanel", () => {
+  it("copies the test account to the clipboard when clicked, and says so briefly", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+
+    render(<AuthPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /Test account/ }));
+
+    expect(writeText).toHaveBeenCalledWith("humoyun@test.com / 123456");
+    await screen.findByText("Copied!");
+  });
+
   it("logs in, lists exams, starts an attempt, answers, and submits to a graded result", async () => {
     queueFetch([
       // POST /api/auth/login

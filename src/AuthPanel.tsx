@@ -131,6 +131,17 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [testAccountCopied, setTestAccountCopied] = useState(false);
+
+  const copyTestAccount = () => {
+    navigator.clipboard
+      .writeText("humoyun@test.com / 123456")
+      .then(() => {
+        setTestAccountCopied(true);
+        setTimeout(() => setTestAccountCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  };
 
   // Switching forms must not drag the old one's banner along - a wrong-password error from
   // login has no business still showing once the student has moved on to creating an account.
@@ -182,10 +193,14 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
       </p>
 
       {mode === "login" && (
-        <div className="mb-4 p-3 rounded-lg bg-magi-surface border border-dashed border-magi-border">
-          <p className="text-xs font-semibold text-magi-primary">Test account</p>
+        <button
+          type="button"
+          onClick={copyTestAccount}
+          className="mb-4 w-full text-left p-3 rounded-lg bg-magi-surface border border-dashed border-magi-border hover:border-magi-primary transition-colors"
+        >
+          <p className="text-xs font-semibold text-magi-primary">{testAccountCopied ? "Copied!" : "Test account"}</p>
           <p className="text-xs text-magi-secondary font-mono mt-0.5">humoyun@test.com / 123456</p>
-        </div>
+        </button>
       )}
 
       {error && <ErrorBanner message={error} />}
