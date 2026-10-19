@@ -1,13 +1,13 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PreExam, RECHECK_MS } from "./PreExam";
-import { checkIdentity } from "./api";
+import { checkIdentity, getMyIdNumber } from "./api";
 import { loadDetector } from "./cameraWatch";
 import { environmentCheck, screenshotTake } from "./ipc";
 import { useCamera } from "./useCamera";
 
 vi.mock("./ipc", () => ({ environmentCheck: vi.fn(), screenshotTake: vi.fn() }));
-vi.mock("./api", () => ({ checkIdentity: vi.fn() }));
+vi.mock("./api", () => ({ checkIdentity: vi.fn(), getMyIdNumber: vi.fn() }));
 vi.mock("./cameraWatch", () => ({ loadDetector: vi.fn() }));
 vi.mock("./useCamera", async () => {
   const { createElement } = await import("react");
@@ -50,6 +50,9 @@ beforeEach(() => {
   // no reference photo on file by default - the common case, and the one every pre-existing
   // test below relies on to reach onReady without being about the identity check itself
   vi.mocked(checkIdentity).mockResolvedValue({ success: true, hasReference: false, matched: true, outcome: "no_reference" });
+  // no ID number assigned by default - every pre-existing test types an arbitrary ID and relies
+  // on it going through unchecked, same as before this feature existed
+  vi.mocked(getMyIdNumber).mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -331,6 +334,70 @@ describe("PreExam, the face check", () => {
     fireEvent.click(startButton());
     await flush();
 
+    expect(onReady).toHaveBeenCalled();
+  });
+});
+
+describe("PreExam, the ID number check", () => {
+  async function ready() {
+    const view = open();
+    await flush();
+    return view;
+  }
+
+  it("refuses to proceed when the typed ID doesn't match the one on the account", async () => {
+    vi.mocked(getMyIdNumber).mockResolvedValue("AB1234567");
+    const { onReady } = await ready();
+    typeId("WRONG-ID");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(checkIdentity).not.toHaveBeenCalled();
+    expect(onReady).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("That's not your ID number");
+  });
+
+  it("proceeds when the typed ID matches, regardless of case or surrounding spaces", async () => {
+    vi.mocked(getMyIdNumber).mockResolvedValue("AB1234567");
+    const { onReady } = await ready();
+    typeId("  ab1234567  ");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).toHaveBeenCalled();
+  });
+
+  it("doesn't check at all when the account has no ID number assigned", async () => {
+    vi.mocked(getMyIdNumber).mockResolvedValue(null);
+    const { onReady } = await ready();
+    typeId("ANYTHING");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).toHaveBeenCalled();
+  });
+
+  it("doesn't block the student when fetching their ID number fails", async () => {
+    vi.mocked(getMyIdNumber).mockRejectedValue(new Error("network down"));
+    const { onReady } = await ready();
+    typeId("ANYTHING");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).toHaveBeenCalled();
+  });
+
+  it("lets the student try again after an ID mismatch", async () => {
+    vi.mocked(getMyIdNumber).mockResolvedValue("AB1234567");
+    const { onReady } = await ready();
+    typeId("WRONG-ID");
+    fireEvent.click(startButton());
+    await flush();
+    expect(onReady).not.toHaveBeenCalled();
+
+    typeId("AB1234567");
+    fireEvent.click(startButton());
+    await flush();
     expect(onReady).toHaveBeenCalled();
   });
 });

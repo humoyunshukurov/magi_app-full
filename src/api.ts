@@ -110,6 +110,18 @@ export async function me(token: string) {
   return { id: user.id, first_name: user.first_name, last_name: user.last_name, email: user.email, role: user.role };
 }
 
+const myProfileSchema = z.object({
+  success: z.literal(true),
+  profile: z.object({ id_number: z.string().nullable() }),
+});
+
+/** The student's own ID card number, set by whoever created their account - what the pre-exam
+ * check compares against what they type, instead of accepting anything. */
+export async function getMyIdNumber(token: string) {
+  const envelope = await request("/api/auth/me/profile", myProfileSchema, { method: "GET" }, token);
+  return envelope.profile.id_number;
+}
+
 const examStatusSchema = z.enum(["demo", "scheduled", "ongoing", "completed", "delayed", "cancelled"]);
 const permittedUrlSchema = z.object({ id: z.number(), url: z.string() });
 const attemptStatusSchema = z.enum(["pending", "in_progress", "submitted", "auto_submitted", "graded", "flagged"]);

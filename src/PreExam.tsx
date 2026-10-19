@@ -3,7 +3,7 @@
 // camera takes one photo of them with their ID card. The exam clock only starts after this.
 
 import { useEffect, useRef, useState } from "react";
-import { checkIdentity } from "./api";
+import { checkIdentity, getMyIdNumber } from "./api";
 import { loadDetector } from "./cameraWatch";
 import type { EnvironmentReport } from "./generated/EnvironmentReport";
 import { environmentCheck, screenshotTake } from "./ipc";
@@ -116,7 +116,26 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
   const [verifying, setVerifying] = useState(false);
   const [mismatch, setMismatch] = useState(false);
   const [noFace, setNoFace] = useState(false);
+  const [idMismatch, setIdMismatch] = useState(false);
   const detector = useRef<Awaited<ReturnType<typeof loadDetector>> | null>(null);
+  // undefined: not loaded yet. null: loaded, but this account has no ID number assigned - the
+  // check below is skipped rather than locking out an account from before this existed.
+  const realIdNumber = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMyIdNumber(token).then(
+      (value) => {
+        if (!cancelled) realIdNumber.current = value;
+      },
+      () => {
+        if (!cancelled) realIdNumber.current = null;
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   // While the student types, the screen is tried once and the picture thrown away: on some systems
   // the computer asks for permission to take screenshots, which is better settled now than in the
@@ -154,6 +173,12 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
   // The reference photo check only runs when a photo was actually captured - no camera means
   // nothing to compare, and that path already proceeds (and is logged) on its own above.
   const start = async () => {
+    setIdMismatch(false);
+    if (realIdNumber.current && id.toLowerCase() !== realIdNumber.current.trim().toLowerCase()) {
+      setIdMismatch(true);
+      return;
+    }
+
     if (camera.problem) return onReady({ idNumber: id, photo: null, notes: notes.current });
     const photo = camera.grab();
     setNotReady(photo === null);
@@ -206,6 +231,12 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
           <input id="id-number" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} autoComplete="off" className={inputClass} />
         </div>
         {notReady && <p className="text-xs text-magi-destructive">The camera picture isn't ready yet, try again in a moment.</p>}
+        {idMismatch && (
+          <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">
+            <p className="text-sm font-bold text-magi-destructive">That&apos;s not your ID number</p>
+            <p className="text-xs text-magi-destructive mt-1">Type the ID number assigned to your own account.</p>
+          </div>
+        )}
         {noFace && (
           <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">
             <p className="text-sm font-bold text-magi-destructive">No face found in the photo</p>
