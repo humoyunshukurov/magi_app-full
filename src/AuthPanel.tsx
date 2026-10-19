@@ -318,11 +318,28 @@ const STATUS_RANK: Record<ExamSummary["status"], number> = {
   cancelled: 3,
 };
 
+// Exams still waiting on the student (nothing started, or an in-progress attempt) are what they
+// actually need to find fast - already handed-in ones sink below so they don't get in the way.
+function isDone(exam: ExamSummary): boolean {
+  return exam.attempt_status === "submitted" || exam.attempt_status === "auto_submitted" || exam.attempt_status === "graded";
+}
+
 function sortExams(exams: ExamSummary[]): ExamSummary[] {
   return [...exams].sort((a, b) => {
+    const doneRank = Number(isDone(a)) - Number(isDone(b));
+    if (doneRank !== 0) return doneRank;
     const rank = STATUS_RANK[a.status] - STATUS_RANK[b.status];
     return rank !== 0 ? rank : b.id - a.id;
   });
+}
+
+function formatSchedule(start: string, end: string): string {
+  const s = new Date(start);
+  const e = new Date(end);
+  const date = s.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const startTime = s.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const endTime = e.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `${date}, ${startTime}–${endTime}`;
 }
 
 function ExamList({
@@ -349,6 +366,7 @@ function ExamList({
               </span>
             </div>
             <p className="text-magi-secondary text-xs font-light mt-1 uppercase tracking-wide">{exam.status}</p>
+            <p className="text-magi-secondary text-[11px] font-mono mt-0.5">{formatSchedule(exam.scheduled_start, exam.scheduled_end)}</p>
             {!exam.attempt_status && <StartsIn scheduledStart={exam.scheduled_start} />}
           </div>
           <div className="mt-4 pt-3 border-t border-magi-border flex justify-between items-center text-xs">
