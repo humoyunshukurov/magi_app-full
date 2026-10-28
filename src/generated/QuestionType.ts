@@ -3,4 +3,4 @@
 /**
  * `public.type_question_type`.
  */
-export type QuestionType = "multiple_choice" | "true_false" | "short_answer" | "essay";
+export type QuestionType = "multiple_choice" | "true_false" | "short_answer" | "essay" | "file_upload";

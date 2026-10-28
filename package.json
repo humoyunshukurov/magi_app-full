@@ -15,6 +15,8 @@
     "@mediapipe/tasks-vision": "^1.0.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-deep-link": "^2",
+    "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/plugin-fs": "^2.7.1",
     "@tauri-apps/plugin-http": "^2.8.0",
     "@tiptap/extension-bold": "3.31.3",
     "@tiptap/extension-heading": "3.31.3",

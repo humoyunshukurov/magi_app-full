@@ -154,7 +154,7 @@ export async function getExam(token: string, examId: number) {
 }
 
 const timeUnitSchema = z.enum(["seconds", "minutes", "hours", "days"]);
-const questionTypeSchema = z.enum(["multiple_choice", "true_false", "short_answer", "essay"]);
+const questionTypeSchema = z.enum(["multiple_choice", "true_false", "short_answer", "essay", "file_upload"]);
 
 const attemptExamBriefSchema = z.object({
   id: z.number(),
@@ -293,6 +293,17 @@ export async function syncAnswers(token: string, attemptId: number, answers: Ans
     token,
   );
   return { synced: envelope.synced, remaining_seconds: envelope.remaining_seconds };
+}
+
+/** Uploads a file as the answer to a `file_upload` question; `fileData` is base64, optionally with a `data:<mime>;base64,` prefix. */
+export async function uploadAnswerFile(token: string, attemptId: number, questionId: number, fileName: string, fileData: string) {
+  const envelope = await request(
+    `/api/assignments/${attemptId}/file`,
+    z.object({ success: z.literal(true), url: z.string(), remaining_seconds: z.number() }),
+    { method: "POST", body: JSON.stringify({ questionId, fileName, fileData }) },
+    token,
+  );
+  return { url: envelope.url, remaining_seconds: envelope.remaining_seconds };
 }
 
 export async function submitAttempt(token: string, attemptId: number, typingTimeline?: Array<{ t: number; chars: number }>) {

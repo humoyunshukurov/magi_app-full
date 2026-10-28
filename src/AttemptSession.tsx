@@ -3,8 +3,20 @@
 // reaches zero.
 
 import { useEffect, useReducer, useRef, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { readFile } from "@tauri-apps/plugin-fs";
 import { AnimatedButton } from "./components/AnimatedButton";
-import { ApiError, getAttempt, submitAttempt, syncAnswers, uploadMedia, type AnswerInput, type AttemptSummary, type TimeUnit } from "./api";
+import {
+  ApiError,
+  getAttempt,
+  submitAttempt,
+  syncAnswers,
+  uploadAnswerFile,
+  uploadMedia,
+  type AnswerInput,
+  type AttemptSummary,
+  type TimeUnit,
+} from "./api";
 import type { AnswerDraft } from "./generated/AnswerDraft";
 import { draftClear, draftLoad, draftSave } from "./ipc";
 import { logActivity, type ActivityKind } from "./activity";
@@ -27,7 +39,20 @@ const TYPE_LABEL: Record<Question["question_type"], string> = {
   true_false: "true/false",
   short_answer: "short answer",
   essay: "essay",
+  file_upload: "file upload",
 };
+
+/** `readFile` gives raw bytes; chunked so a multi-MB file doesn't blow the call stack via spread. */
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+const fileNameOf = (path: string) => path.split(/[\\/]/).pop() ?? path;
 const UNIT_SECONDS: Record<TimeUnit, number> = { seconds: 1, minutes: 60, hours: 3600, days: 86400 };
 // a submit that actually reached the server leaves the attempt in one of these - used to tell a
 // genuinely-failed submit apart from one whose response was merely lost in transit
@@ -126,6 +151,7 @@ export function AttemptSession({
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "failed">("idle");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const deadline = useRef(Date.now() + attempt.remaining_seconds * 1000);
   const shownAt = useRef(Date.now());
@@ -479,6 +505,27 @@ export function AttemptSession({
     changed(q.question_id);
   };
 
+  const pickFile = async () => {
+    const path = await open({ multiple: false }).catch(() => null);
+    if (!path || Array.isArray(path)) return;
+
+    setError(null);
+    setUploading(true);
+    try {
+      const bytes = await readFile(path);
+      const fileName = fileNameOf(path);
+      const { url } = await uploadAnswerFile(token, attempt.id, q.question_id, fileName, toBase64(bytes));
+      s.answer = url;
+      s.answeredAt = new Date().toISOString();
+      changed(q.question_id);
+      log("question_summary", `Uploaded "${fileName}" for question ${questions.indexOf(q) + 1}`, { questionId: q.question_id });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not upload the file");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const syncLabel = syncStatus === "syncing" ? "Saving…" : syncStatus === "failed" ? "Couldn't sync, retrying" : "Saved";
 
   return (
@@ -551,6 +598,29 @@ export function AttemptSession({
             label="Your answer"
             onChange={typed}
           />
+        ) : q.question_type === "file_upload" ? (
+          <div className="space-y-2">
+            {s.answer && (
+              <a
+                href={s.answer}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-sm text-magi-primary underline break-all"
+              >
+                {fileNameOf(s.answer)}
+              </a>
+            )}
+            <div>
+              <AnimatedButton
+                type="button"
+                disabled={uploading}
+                onClick={() => void pickFile()}
+                className="px-4 py-2 text-xs font-bold rounded-lg border border-magi-border text-magi-primary hover:border-magi-primary transition-all disabled:opacity-60"
+              >
+                {uploading ? "Uploading…" : s.answer ? "Replace file" : "Choose file to upload"}
+              </AnimatedButton>
+            </div>
+          </div>
         ) : (
           <div className="flex flex-wrap gap-2">
             {q.options.map((opt) => (
