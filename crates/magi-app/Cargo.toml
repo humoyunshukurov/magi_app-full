@@ -12,11 +12,14 @@ doctest = false
 [dependencies]
 magi-types = { workspace = true }
 magi-core = { workspace = true }
+magi-storage = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = "2"
+base64 = "0.22"
+uuid = { workspace = true }
 
 tauri = { version = "2", features = [] }
 tauri-plugin-deep-link = "2"
@@ -25,9 +28,34 @@ tauri-plugin-os = "2"
 tauri-plugin-process = "2"
 tauri-plugin-store = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
 # `default-features = false` drops the `cookies` feature (reqwest cookie store), which
 # pulls `cookie 0.18.1` and conflicts (E0119) with the `time` version tauri requires.
 # We also pin `rustls-tls` over native-tls per ADR-0003/Tech Stack (rustls preferred).
 tauri-plugin-http = { version = "2", default-features = false, features = ["rustls-tls"] }
 tauri-plugin-window-state = "2"
 tauri-plugin-updater = "2"
+sysinfo = { version = "0.35", default-features = false, features = ["system"] }
+# screenshots: scaled down and stored as JPEG
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+# The database key lives in the OS keychain (ADR-0003), never next to the database file.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+# the screenshot portal is the only way to capture the screen on Wayland
+zbus = "5"
+# WebKitGTK's own camera support hangs or crashes its web process, so on Linux the camera is
+# read here instead (it hands out ready-made JPEG frames, nothing to decode).
+v4l = "0.14"
+# Window enumeration for the pre-exam "other windows must be closed" check - X11/XWayland only,
+# see environment.rs's `other_windows()` for why that's a real, acknowledged gap on Wayland.
+# `xcap`'s own window support would pull this in too, but unconditionally drags in pipewire for
+# its (unused here) Wayland video-recording feature, which needs a system package we don't have -
+# talking to X11 directly for the one thing we actually need avoids that entirely.
+xcb = { version = "1.7", features = ["randr"] }
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+xcap = "0.9"
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+xcap = "0.9"

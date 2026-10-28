@@ -7,18 +7,18 @@ CLAUDE.local.md
 **/target
 Cargo.lock.orig
 
-# Node / frontend
-node_modules/
-frontend/dist/
-frontend/node_modules/
-*.local
+# backend/ and frontend/ are their own nested git repos now, not tracked from here
+/backend
+/frontend
 
 # Tauri
 src-tauri/gen/
 src-tauri/target/
 
-# Generated TS bindings are committed; uncomment to ignore instead
-# frontend/src/generated/
+# snapcraft build output (parts/prime/stage), not the recipe itself (snap/snapcraft.yaml)
+/parts
+/prime
+/stage
 
 # OS / editor junk
 .DS_Store

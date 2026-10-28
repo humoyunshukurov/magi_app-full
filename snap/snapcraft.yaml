@@ -1,0 +1,28 @@
+name: magi-app
+title: MAGI Desktop
+base: core22
+version: '1.0.0'
+summary: Forensic-grade desktop client for the MAGI academic-integrity platform
+description: |
+  MAGI Desktop captures the writing process as behavioral metadata during a
+  proctored assignment session, enforces configurable integrity levels, and
+  produces a tamper-evident forensic dossier synced back to the MAGI
+  University platform.
+contact: humoyunshukurov12@gmail.com
+grade: stable
+confinement: strict
+
+apps:
+  magi-app:
+    command: usr/bin/magi-desktop
+    extensions: [gnome]
+    plugs:
+      - network
+      - home
+    desktop: usr/share/applications/MAGI Desktop.desktop
+
+parts:
+  magi-desktop:
+    plugin: dump
+    source: target/release/bundle/deb/MAGI Desktop_1.0.0_amd64.deb
+    source-type: deb

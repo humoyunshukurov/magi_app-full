@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.0"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.87"
 license = "LicenseRef-Proprietary"
@@ -39,3 +39,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
 ts-rs = { version = "10", features = ["uuid-impl"] }
 tokio = { version = "1", features = ["full"] }
+# SQLCipher with OpenSSL built from source, so the same build works on Windows/macOS/Linux (ADR-0003).
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }

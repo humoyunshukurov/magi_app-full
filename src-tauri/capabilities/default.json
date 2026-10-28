@@ -10,6 +10,14 @@
     "process:default",
     "store:default",
     "fs:default",
-    "http:default"
+    "fs:allow-read-file",
+    "dialog:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://localhost:8000/*" },
+        { "url": "https://magi-backned-production.up.railway.app/*" }
+      ]
+    }
   ]
 }

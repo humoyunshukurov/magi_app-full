@@ -102,6 +102,109 @@ pub struct PingResponse {
     pub core_version: String,
 }
 
+/// A question's in-progress answer as held in the encrypted local store between keystrokes
+/// and the next sync to the backend (`PUT /api/attempts/:id/answers`).
+///
+/// Ids are plain JSON numbers on the wire, so they are pinned to `number` on the TypeScript
+/// side instead of the `bigint` ts-rs would pick for `i64`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../frontend/src/generated/")]
+pub struct AnswerDraft {
+    #[ts(type = "number")]
+    pub attempt_id: i64,
+    #[ts(type = "number")]
+    pub question_id: i64,
+    /// Free-text answer (short answer / essay); empty for choice questions.
+    pub answer: String,
+    #[ts(type = "Array<number>")]
+    pub option_ids: Vec<i64>,
+    /// Seconds of active typing.
+    pub typing_duration: u32,
+    /// Characters typed.
+    pub text_typed: u32,
+    /// Operations that changed already-written text (deletes, replacements, mid-text inserts).
+    pub text_edited: u32,
+    /// Characters pasted in.
+    pub text_pasted: u32,
+    /// Paste (or drop) operations specifically, regardless of how many characters each carried.
+    pub paste_events: u32,
+    /// Delete operations specifically (a subset of `text_edited`).
+    pub text_deleted: u32,
+    /// Pauses longer than the freeze threshold between two inputs.
+    pub freeze_count: u32,
+    /// The longest such pause, in seconds.
+    pub longest_freeze: u32,
+    /// Seconds the question was on screen.
+    pub time_spent: u32,
+    /// RFC 3339 timestamps.
+    pub started_at: Option<String>,
+    pub answered_at: Option<String>,
+}
+
+/// One thing a student did (or that happened to them) during an attempt, kept in the encrypted
+/// local store for the Activity page. Scoped to `user_id`, so the next person to sign in on the
+/// same computer doesn't see it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../frontend/src/generated/")]
+pub struct ActivityEvent {
+    #[ts(type = "number")]
+    pub user_id: i64,
+    #[ts(type = "number")]
+    pub attempt_id: i64,
+    pub exam_name: String,
+    /// RFC 3339, from the device clock.
+    pub at: String,
+    /// `attempt_started`, `attempt_resumed`, `identity_check` (ID number and photo), `camera_on`,
+    /// `camera_off`, `camera_failed`, `camera_checks_off`, `camera_away`, `camera_back`,
+    /// `phone_seen` (`camera_away`, `phone_seen` and `screenshot` carry a photo in `data`),
+    /// `screenshot`, `screenshot_failed`, `question_opened`, `question_summary`, `paste` (from
+    /// outside the exam, blocked), `devtools_attempt`, `monitor_added`, `monitor_removed`,
+    /// `app_detected`, `app_closed`, `link_opened`, `link_closed`, `link_blocked`, `window_left`,
+    /// `window_returned`, `sync_failed`, `sync_recovered`, `drafts_restored`, `attempt_submitted`,
+    /// `auto_submitted`, `submit_failed`.
+    pub kind: String,
+    #[ts(type = "number | null")]
+    pub question_id: Option<i64>,
+    /// One readable line for the timeline.
+    pub detail: String,
+    /// Machine-readable extras as a JSON object (e.g. the counters of a `question_summary`).
+    pub data: String,
+}
+
+/// An attempt that has activity recorded, for the Activity page's picker.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../frontend/src/generated/")]
+pub struct ActivityAttempt {
+    #[ts(type = "number")]
+    pub attempt_id: i64,
+    pub exam_name: String,
+    pub first_at: String,
+    pub last_at: String,
+    pub events: u32,
+}
+
+/// What the exam needs to know about the computer it runs on: how many screens are connected,
+/// and whether any app that could help cheat (remote control, screen sharing or recording) or
+/// any browser is open. Read before an exam starts and again while it runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../frontend/src/generated/")]
+pub struct EnvironmentReport {
+    pub monitor_count: u32,
+    /// Set on a developer's own computer (`MAGI_ALLOW_EXTRA_SCREENS=1`) so a second screen doesn't
+    /// hold the exam back. Never set for students.
+    pub extra_screens_allowed: bool,
+    /// Remote control and screen sharing/recording apps that are running, by name.
+    pub forbidden_apps: Vec<String>,
+    /// Browsers that are running, by name.
+    pub browsers: Vec<String>,
+    /// Other apps' visible windows open besides this one, by name - empty where this can't be
+    /// checked (Linux/Wayland gives no app a way to list other apps' windows).
+    pub other_windows: Vec<String>,
+    /// Set on a developer's own computer (`MAGI_ALLOW_OTHER_WINDOWS=1`) so an editor/terminal
+    /// left open doesn't hold the exam back. Never set for students.
+    pub other_windows_allowed: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,5 +239,9 @@ mod tests {
         SessionId::export_all().expect("export SessionId");
         IntegrityLevel::export_all().expect("export IntegrityLevel");
         PingResponse::export_all().expect("export PingResponse");
+        AnswerDraft::export_all().expect("export AnswerDraft");
+        ActivityEvent::export_all().expect("export ActivityEvent");
+        ActivityAttempt::export_all().expect("export ActivityAttempt");
+        EnvironmentReport::export_all().expect("export EnvironmentReport");
     }
 }
