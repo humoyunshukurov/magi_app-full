@@ -11,11 +11,13 @@ use sqlx::PgPool;
 use crate::access;
 use crate::attempts::models::{
     AnswerInput, AttemptDetail, AttemptExamBrief, AttemptQuestion, AttemptQuestionOption, AttemptStatus,
-    AttemptSummary, QuestionType, SubmitResponse, SyncAnswersResponse,
+    AttemptSummary, QuestionType, SubmitResponse, SyncAnswersResponse, UploadAnswerFileResponse,
 };
+use crate::config::Config;
 use crate::deadline::{deadline, TimeUnit, Window};
 use crate::error::{map_unique_violation, AppError};
 use crate::exams::models::{ExamStatus, PermittedUrl};
+use crate::storage;
 
 struct Exam {
     id: i64,
@@ -715,6 +717,60 @@ pub async fn sync_answers(
     .await?;
 
     Ok(SyncAnswersResponse { synced, remaining_seconds: remaining_seconds(&current, &exam) })
+}
+
+/// `POST /api/attempts/:id/file`. A `file_upload` question is answered by uploading a file
+/// instead of typing - the file's public URL becomes the answer, same column every other
+/// question type already writes to.
+pub async fn upload_answer_file(
+    pool: &PgPool,
+    config: &Config,
+    student_id: i64,
+    attempt_id: i64,
+    question_id: i64,
+    file_name: &str,
+    file_data: &str,
+) -> Result<UploadAnswerFileResponse, AppError> {
+    let (attempt, exam) = load_own_attempt(pool, student_id, attempt_id).await?;
+    let current = ensure_current(pool, attempt, &exam).await?;
+    if !is_open(&current) {
+        let message = if current.auto_submitted {
+            "Time is up: this attempt has been submitted automatically"
+        } else {
+            "This attempt is not in progress"
+        };
+        return Err(AppError::Conflict(message.to_string()));
+    }
+
+    let question_type: Option<QuestionType> = sqlx::query_scalar(
+        "select q.question_type from public.question_assignment qa \
+         join public.questions q on q.id = qa.question_id \
+         where qa.assignment_id = $1 and qa.question_id = $2",
+    )
+    .bind(current.id)
+    .bind(question_id)
+    .fetch_optional(pool)
+    .await?;
+
+    match question_type {
+        None => return Err(AppError::BadRequest(format!("Question {question_id} is not part of this attempt"))),
+        Some(QuestionType::FileUpload) => {}
+        Some(_) => return Err(AppError::BadRequest("This question does not accept a file".to_string())),
+    }
+
+    let url = storage::upload_submission_file(config, current.id, question_id, file_name, file_data).await?;
+
+    sqlx::query(
+        "update public.question_assignment set answer = $3, answered_at = now(), last_synced_at = now() \
+         where assignment_id = $1 and question_id = $2",
+    )
+    .bind(current.id)
+    .bind(question_id)
+    .bind(&url)
+    .execute(pool)
+    .await?;
+
+    Ok(UploadAnswerFileResponse { url, remaining_seconds: remaining_seconds(&current, &exam) })
 }
 
 /// `POST /api/attempts/:id/submit`.

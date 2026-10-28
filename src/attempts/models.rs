@@ -34,12 +34,13 @@ pub enum QuestionType {
     TrueFalse,
     ShortAnswer,
     Essay,
+    FileUpload,
 }
 
 impl QuestionType {
     /// The types a professor has to grade by hand; everything else is graded at submit.
     pub fn is_manual(self) -> bool {
-        matches!(self, QuestionType::ShortAnswer | QuestionType::Essay)
+        matches!(self, QuestionType::ShortAnswer | QuestionType::Essay | QuestionType::FileUpload)
     }
 }
 
@@ -161,6 +162,21 @@ pub struct SyncAnswersRequest {
 #[ts(export, export_to = "../../frontend/src/generated/")]
 pub struct SyncAnswersResponse {
     pub synced: usize,
+    pub remaining_seconds: i64,
+}
+
+#[derive(Debug, Deserialize, TS)]
+#[ts(export, export_to = "../../frontend/src/generated/")]
+pub struct UploadAnswerFileRequest {
+    pub question_id: i64,
+    pub file_name: String,
+    pub file_data: String,
+}
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export, export_to = "../../frontend/src/generated/")]
+pub struct UploadAnswerFileResponse {
+    pub url: String,
     pub remaining_seconds: i64,
 }
 

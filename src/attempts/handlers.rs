@@ -1,7 +1,10 @@
 use axum::extract::{Path, State};
 use axum::Json;
 
-use crate::attempts::models::{AttemptDetail, AttemptSummary, StartAttemptRequest, SubmitResponse, SyncAnswersRequest, SyncAnswersResponse};
+use crate::attempts::models::{
+    AttemptDetail, AttemptSummary, StartAttemptRequest, SubmitResponse, SyncAnswersRequest, SyncAnswersResponse,
+    UploadAnswerFileRequest, UploadAnswerFileResponse,
+};
 use crate::attempts::service;
 use crate::auth::CurrentUser;
 use crate::error::AppError;
@@ -49,6 +52,18 @@ pub async fn sync_answers(
 ) -> Result<ApiResponse<SyncAnswersResponse>, AppError> {
     current.require_student()?;
     let result = service::sync_answers(&state.pool, current.id, attempt_id, body.answers).await?;
+    Ok(ApiResponse::ok(result))
+}
+
+/// `POST /api/attempts/:id/file`.
+pub async fn upload_answer_file(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Path(attempt_id): Path<i64>,
+    Json(body): Json<UploadAnswerFileRequest>,
+) -> Result<ApiResponse<UploadAnswerFileResponse>, AppError> {
+    current.require_student()?;
+    let result = service::upload_answer_file(&state.pool, &state.config, current.id, attempt_id, body.question_id, &body.file_name, &body.file_data).await?;
     Ok(ApiResponse::ok(result))
 }
 

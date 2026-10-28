@@ -20,6 +20,7 @@ pub mod response;
 pub mod state;
 pub mod storage;
 
+use axum::extract::DefaultBodyLimit;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -37,6 +38,9 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api/attempts", attempts::routes::router())
         .nest("/api/monitoring", monitoring::routes::router())
         .nest("/api/cheatings", cheatings::routes::router())
+        // axum's own 2MB default would reject a base64 photo/file upload well under the
+        // Supabase-side caps (`storage.rs`) - match the TS backend's 10mb express.json() limit
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
