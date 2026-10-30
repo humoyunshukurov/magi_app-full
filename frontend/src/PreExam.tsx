@@ -121,6 +121,10 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
   // undefined: not loaded yet. null: loaded, but this account has no ID number assigned - the
   // check below is skipped rather than locking out an account from before this existed.
   const realIdNumber = useRef<string | null | undefined>(undefined);
+  // the Start button used to only gate on the camera/screen checks, so typing fast enough could
+  // press it before this fetch resolved - realIdNumber.current was still undefined (falsy), and
+  // any ID number typed in sailed right through the check below unmatched
+  const [idNumberLoaded, setIdNumberLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,7 +135,9 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
       () => {
         if (!cancelled) realIdNumber.current = null;
       },
-    );
+    ).finally(() => {
+      if (!cancelled) setIdNumberLoaded(true);
+    });
     return () => {
       cancelled = true;
     };
@@ -254,7 +260,7 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
             Checking your screen… If your computer asks whether to allow screenshots, allow it.
           </p>
         )}
-        <button type="button" disabled={id === "" || !ready || !screenChecked || verifying} onClick={() => void start()} className={`${primaryButtonClass} mx-auto`}>
+        <button type="button" disabled={id === "" || !ready || !screenChecked || !idNumberLoaded || verifying} onClick={() => void start()} className={`${primaryButtonClass} mx-auto`}>
           {camera.problem ? "Start without the photo" : verifying ? "Verifying your identity…" : ready ? "Take the photo and start the exam" : "Starting camera…"}
         </button>
         <p className="text-xs text-magi-secondary">The exam clock starts when you press the button.</p>

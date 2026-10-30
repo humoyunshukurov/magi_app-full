@@ -387,6 +387,26 @@ describe("PreExam, the ID number check", () => {
     expect(onReady).toHaveBeenCalled();
   });
 
+  it("doesn't let the student start before their real ID number has finished loading", async () => {
+    let resolveIdNumber: ((value: string | null) => void) | undefined;
+    vi.mocked(getMyIdNumber).mockReturnValue(
+      new Promise((resolve) => {
+        resolveIdNumber = resolve;
+      }),
+    );
+    const { onReady } = await ready();
+    typeId("WRONG-ID");
+    expect(startButton().disabled).toBe(true);
+
+    resolveIdNumber?.("AB1234567");
+    await flush();
+    expect(startButton().disabled).toBe(false);
+    fireEvent.click(startButton());
+    await flush();
+    expect(onReady).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("That's not your ID number");
+  });
+
   it("lets the student try again after an ID mismatch", async () => {
     vi.mocked(getMyIdNumber).mockResolvedValue("AB1234567");
     const { onReady } = await ready();
