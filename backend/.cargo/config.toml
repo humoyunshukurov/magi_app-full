@@ -1,0 +1,7 @@
+# Prefer dependency versions compatible with our declared MSRV (rust-version) over the
+# absolute latest. This avoids pulling crates (e.g. time 0.3.55 → rustc 1.88) whose newer
+# transitive combination breaks compilation in this environment. Duplicated from the parent
+# magi_app workspace's own .cargo/config.toml: now that this is a standalone package (its own
+# `[workspace]`), it can't rely on inheriting that config from its old workspace.
+[resolver]
+incompatible-rust-versions = "fallback"
