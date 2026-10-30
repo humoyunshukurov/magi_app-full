@@ -12,6 +12,10 @@ env:
 jobs:
   release:
     name: Build + publish (${{ matrix.os }})
+    # tauri-action creates the GitHub Release itself via GITHUB_TOKEN - the default token is
+    # read-only unless a job explicitly asks for write access
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
