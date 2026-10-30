@@ -9,10 +9,6 @@ vi.mock("./PreExam", async () => {
   };
 });
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => undefined)) }));
-vi.mock("./ipc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./ipc")>()),
-  ping: vi.fn(() => Promise.resolve({ message: "pong", core_version: "0.0.0" })),
-}));
 
 import { App } from "./App";
 
@@ -43,8 +39,7 @@ describe("App navigation", () => {
     ]);
 
     render(<App />);
-    await screen.findByText(/pong/);
-    expect(screen.getByRole("heading", { name: "Sign In" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Sign In" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Grades" })).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "s@example.com" } });

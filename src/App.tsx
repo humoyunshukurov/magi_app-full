@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { ping, launchPayloadSchema, LAUNCH_EVENT } from "./ipc";
+import { useCallback, useState } from "react";
 import type { UserSummary } from "./api";
 import { AuthPanel } from "./AuthPanel";
 import { GradesPage } from "./GradesPage";
@@ -16,42 +14,11 @@ export function App() {
   const [page, setPage] = useState<Page>("exams");
   const [session, setSession] = useState<{ user: UserSummary; token: string } | null>(null);
   const [examRunning, setExamRunning] = useState(false);
-  const [pong, setPong] = useState<string | null>(null);
-  const [coreVersion, setCoreVersion] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [lastToken, setLastToken] = useState<string | null>(null);
   const user = session?.user ?? null;
 
   const onSessionChange = useCallback((next: { user: UserSummary; token: string } | null) => {
     setSession(next);
     if (!next) setPage("exams");
-  }, []);
-
-  // Demo IPC: call `ping` once on mount.
-  useEffect(() => {
-    ping()
-      .then((res) => {
-        setPong(res.message);
-        setCoreVersion(res.core_version);
-      })
-      .catch((e: unknown) => setError(String(e)));
-  }, []);
-
-  // Subscribe to launch hand-offs. M0 only observes the token (claiming is M3).
-  useEffect(() => {
-    const unlisten = listen(LAUNCH_EVENT, (event) => {
-      const parsed = launchPayloadSchema.safeParse(event.payload);
-      if (parsed.success) {
-        // eslint-disable-next-line no-console
-        console.log("launch token received:", parsed.data.token);
-        setLastToken(parsed.data.token);
-      } else {
-        console.error("invalid launch payload", parsed.error);
-      }
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
   }, []);
 
   const shownPage = examRunning ? "exams" : page;
@@ -89,37 +56,6 @@ export function App() {
         <main className={`flex-grow min-w-0 w-full ${examRunning ? "px-4 py-4" : "max-w-5xl mx-auto px-6 py-10"}`}>
           <div hidden={shownPage !== "exams"} className="space-y-8">
             <AuthPanel onSessionChange={onSessionChange} onExamRunning={setExamRunning} />
-
-            <details className="glass-card p-4 max-w-3xl mx-auto text-xs">
-              <summary className="cursor-pointer font-semibold text-magi-secondary uppercase tracking-wide">
-                Diagnostics: IPC + deep link
-              </summary>
-              <div className="mt-3 space-y-3">
-                <div>
-                  <h3 className="font-medium text-magi-secondary">IPC: ping</h3>
-                  {error ? (
-                    <p className="mt-1 font-mono text-magi-destructive">error: {error}</p>
-                  ) : pong ? (
-                    <p className="mt-1 font-mono text-magi-success">
-                      {pong} <span className="text-magi-secondary">(core {coreVersion})</span>
-                    </p>
-                  ) : (
-                    <p className="mt-1 font-mono text-magi-secondary">calling…</p>
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-medium text-magi-secondary">Deep link: {LAUNCH_EVENT}</h3>
-                  {lastToken ? (
-                    <p className="mt-1 font-mono text-magi-primary">token: {lastToken}</p>
-                  ) : (
-                    <p className="mt-1 text-magi-secondary">
-                      Waiting for a <code>magi://launch?token=…</code> deep link. Try{" "}
-                      <code>open &apos;magi://launch?token=stub&apos;</code>.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </details>
           </div>
 
           {session && (
