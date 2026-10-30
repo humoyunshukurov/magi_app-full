@@ -1,0 +1,64 @@
+name: Release
+
+# ADR-0008: tagging a version builds, signs, and publishes it as a GitHub Release - including
+# latest.json, which every installed app polls on launch (tauri.conf.json's plugins.updater).
+on:
+  push:
+    tags: ["v*.*.*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Build + publish (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+          - os: windows-2022
+          - os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system deps (Tauri / WebKitGTK)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Build, sign and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "MAGI Desktop ${{ github.ref_name }}"
+          releaseBody: "See the commit log for what changed."
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true

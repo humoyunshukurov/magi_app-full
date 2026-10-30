@@ -8,6 +8,7 @@
     "deep-link:default",
     "os:default",
     "process:default",
+    "updater:default",
     "store:default",
     "fs:default",
     "fs:allow-read-file",

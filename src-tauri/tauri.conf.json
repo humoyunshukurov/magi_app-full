@@ -29,6 +29,12 @@
       "desktop": {
         "schemes": ["magi"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMzNTNDOUVGRjU5RkRFQTYKUldTbTNwLzE3OGxUTTk3ZG52eHJsNWplMC9XbDJFclEwRXl6Wm4zUmNwa0E4SVpFRDlHU1NITUMK",
+      "endpoints": [
+        "https://github.com/humoyunshukurov/magi_app-full/releases/latest/download/latest.json"
+      ]
     }
   },
   "bundle": {

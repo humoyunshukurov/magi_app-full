@@ -13,11 +13,12 @@ https://app.notion.com/p/048ae832d87f8259908c81dcce1c566b
 | 0005 | System proxy strategy for Level 2/3 network enforcement       | 🟡 Proposed |
 | 0006 | Editor: custom controlled component on contenteditable        | 🟡 Proposed |
 | 0007 | Tamper-evident event log via per-event prev-hash chain        | 🟢 Accepted |
-| 0008 | Auto-updater channel design                                   | 🔴 Open     |
+| 0008 | [Auto-updater channel design](0008-auto-updater-channel-design.md) | 🟢 Accepted |
 | 0009 | Multi-device session conflict policy                          | 🟡 Proposed |
 | 0010 | Deep link launch protocol                                     | 🟡 Proposed |
 
-ADRs 0001–0003 are mirrored here for M0; the rest live in Notion until they're touched by code.
+ADRs 0001–0003 and 0008 are mirrored here as they're touched by code; the rest live in Notion
+until they are.
 
 To propose a new ADR, use the `/new-adr` Claude Code command (drafts land in
 `.claude/adrs-drafts/`), then promote it to Notion once accepted.

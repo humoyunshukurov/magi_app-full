@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { ping, launchPayloadSchema, LAUNCH_EVENT } from "./ipc";
 import type { UserSummary } from "./api";
 import { AuthPanel } from "./AuthPanel";
@@ -25,6 +27,22 @@ export function App() {
   const onSessionChange = useCallback((next: { user: UserSummary; token: string } | null) => {
     setSession(next);
     if (!next) setPage("exams");
+  }, []);
+
+  // ADR-0008: checked once per launch, before anything else the student might do - an exam is
+  // never interrupted mid-attempt, since a relaunch only happens here, at startup. Windows exits
+  // the app itself after installing; macOS/Linux need the explicit relaunch below.
+  useEffect(() => {
+    (async () => {
+      try {
+        const update = await check();
+        if (!update) return;
+        await update.downloadAndInstall();
+        await relaunch();
+      } catch (e) {
+        console.error("update check failed:", e);
+      }
+    })();
   }, []);
 
   // Demo IPC: call `ping` once on mount.

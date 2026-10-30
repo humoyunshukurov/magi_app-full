@@ -93,6 +93,20 @@ docs/adrs/            # code-adjacent ADR mirror
 | Regenerate TS bindings       | `cargo test -p magi-types export_bindings`                     |
 | Frontend test / typecheck    | `pnpm --dir frontend test` · `pnpm --dir frontend typecheck`  |
 
+## Releasing a new version (ADR-0008)
+
+Every installed app checks `.../releases/latest/download/latest.json` once per launch and
+updates itself silently - no student action needed.
+
+1. Bump `version` in `src-tauri/tauri.conf.json`.
+2. `git tag vX.Y.Z && git push origin vX.Y.Z` (must match the version above).
+3. `.github/workflows/release.yml` builds for macOS/Windows/Linux, signs the bundles with the
+   `TAURI_SIGNING_PRIVATE_KEY` repo secret, and publishes them as a GitHub Release with
+   `latest.json` attached.
+
+`backend/` is the retired standalone Rust server (kept for history only - the desktop app
+talks to `magi-backend` on Railway, not this).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming, the ADR process, and review

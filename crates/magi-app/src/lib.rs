@@ -47,10 +47,9 @@ pub fn run(context: tauri::Context<tauri::Wry>) -> tauri::Result<()> {
                 )
                 .build(),
         )
-        // NOTE: the `updater` plugin is a declared dependency but is intentionally NOT
-        // registered at M0 — it requires a signing pubkey + update endpoints
-        // (`plugins.updater` config) that are part of M7 (Release Infrastructure, ADR-0008).
-        // Registering it without config makes startup fail. Wire it up in M7.
+        // M7 (ADR-0008): the pubkey + GitHub Releases endpoint live in tauri.conf.json's
+        // `plugins.updater` config, which this plugin reads at startup.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             deep_link::setup(app)?;
             open_storage(app);

@@ -18,6 +18,8 @@
     "@tauri-apps/plugin-dialog": "^2.8.3",
     "@tauri-apps/plugin-fs": "^2.7.1",
     "@tauri-apps/plugin-http": "^2.8.0",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "@tiptap/extension-bold": "3.31.3",
     "@tiptap/extension-heading": "3.31.3",
     "@tiptap/extension-italic": "3.31.3",
