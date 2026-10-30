@@ -48,6 +48,9 @@ export function useCameraWatch(
     const judge = createJudge();
     let looks = 0;
     const photosByKind: Partial<Record<WatchEventKind, number>> = {};
+    // a single bad frame (canvas not ready yet, a transient model hiccup) must not end watching
+    // for the rest of the exam - note it once, but keep ticking either way
+    let reportedBrokenCheck = false;
 
     const tick = () => {
       const source = pictureRef.current();
@@ -73,8 +76,10 @@ export function useCameraWatch(
             }
           }
         } catch (err) {
-          report.current("camera_checks_off", `Phone and presence checks stopped: ${String(err)}`, {});
-          return;
+          if (!reportedBrokenCheck) {
+            reportedBrokenCheck = true;
+            report.current("camera_checks_off", `Phone and presence checks stopped: ${String(err)}`, {});
+          }
         }
       }
       timer = setTimeout(tick, TICK_MS);
