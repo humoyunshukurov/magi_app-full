@@ -104,6 +104,19 @@ updates itself silently - no student action needed.
    `TAURI_SIGNING_PRIVATE_KEY` repo secret, and publishes them as a GitHub Release with
    `latest.json` attached.
 
+### macOS Gatekeeper
+
+The macOS build isn't notarized by Apple (that needs a paid Apple Developer Program
+membership), so Gatekeeper blocks it outright on first launch with "can't be opened" - it's
+not a bug. Right-click (Control-click) the app → Open → Open again, or
+`xattr -cr "/Applications/MAGI Desktop.app"`, gets past it on any one machine.
+
+To fix this for good, once there's an Apple Developer account: add `APPLE_CERTIFICATE`
+(base64 `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
+`APPLE_PASSWORD` (an app-specific password, not the Apple ID's own), and `APPLE_TEAM_ID` as
+repo secrets - `release.yml` already reads them and will notarize automatically the next time
+a version is tagged. Nothing else changes; these are no-ops while unset.
+
 `backend/` is the retired standalone Rust server (kept for history only - the desktop app
 talks to `magi-backend` on Railway, not this).
 
