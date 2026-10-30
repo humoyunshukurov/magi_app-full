@@ -6,7 +6,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { z } from "zod";
-import type { ActivityAttempt } from "./generated/ActivityAttempt";
 import type { ActivityEvent } from "./generated/ActivityEvent";
 import type { AnswerDraft } from "./generated/AnswerDraft";
 import type { EnvironmentReport } from "./generated/EnvironmentReport";
@@ -81,27 +80,9 @@ export const activityEventSchema = z.object({
   data: z.string(),
 }) satisfies z.ZodType<ActivityEvent>;
 
-export const activityAttemptSchema = z.object({
-  attempt_id: z.number(),
-  exam_name: z.string(),
-  first_at: z.string(),
-  last_at: z.string(),
-  events: z.number(),
-}) satisfies z.ZodType<ActivityAttempt>;
-
 /** Appends one entry to the encrypted local activity log. */
 export async function activityLog(event: ActivityEvent): Promise<void> {
   await invoke("activity_log", { event });
-}
-
-/** The attempts of a user that have recorded activity, newest first. */
-export async function activityAttempts(userId: number): Promise<ActivityAttempt[]> {
-  return z.array(activityAttemptSchema).parse(await invoke("activity_attempts", { userId }));
-}
-
-/** Everything recorded for one attempt of a user, in order. */
-export async function activityList(userId: number, attemptId: number): Promise<ActivityEvent[]> {
-  return z.array(activityEventSchema).parse(await invoke("activity_list", { userId, attemptId }));
 }
 
 /**

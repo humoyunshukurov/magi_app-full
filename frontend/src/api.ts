@@ -141,16 +141,9 @@ const examSummarySchema = z.object({
 });
 export type ExamSummary = z.infer<typeof examSummarySchema>;
 
-const examDetailSchema = examSummarySchema.extend({ permitted_urls: z.array(permittedUrlSchema) });
-
 export async function listExams(token: string) {
   const envelope = await request("/api/exams", z.object({ success: z.literal(true), exams: z.array(examSummarySchema) }), { method: "GET" }, token);
   return envelope.exams;
-}
-
-export async function getExam(token: string, examId: number) {
-  const envelope = await request(`/api/exams/${examId}`, z.object({ success: z.literal(true), exam: examDetailSchema }), { method: "GET" }, token);
-  return envelope.exam;
 }
 
 const timeUnitSchema = z.enum(["seconds", "minutes", "hours", "days"]);

@@ -1,7 +1,6 @@
-// What the student did during an attempt, written to the encrypted local log and read back by
-// the Activity page.
+// What the student did during an attempt, written to the encrypted local log and synced to the
+// server as proctoring violations/snapshots where relevant - staff review it there, not in this app.
 
-import { z } from "zod";
 import type { ActivityEvent } from "./generated/ActivityEvent";
 import { activityLog } from "./ipc";
 import { reportCheating, uploadMedia, type CheatingType } from "./api";
@@ -110,28 +109,5 @@ export function logActivity(
   const image = extra.data?.image;
   if (PHOTO_KIND.has(kind) && typeof image === "string") {
     syncOnce(`uploadMedia(${kind})`, () => uploadMedia(ctx.token, ctx.attemptId, "snapshots", image, detail));
-  }
-}
-
-/** The counters carried by a `question_summary` entry. */
-export const questionSummarySchema = z.object({
-  label: z.string(),
-  position: z.number(),
-  typed: z.number(),
-  edited: z.number(),
-  pasted: z.number(),
-  typing_seconds: z.number(),
-  time_spent_seconds: z.number(),
-  answered: z.boolean(),
-});
-export type QuestionSummary = z.infer<typeof questionSummarySchema>;
-
-/** Parses an entry's `data` as JSON, or null if it isn't valid. */
-export function parseData<T extends z.ZodTypeAny>(schema: T, data: string): z.infer<T> | null {
-  try {
-    const parsed = schema.safeParse(JSON.parse(data));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
   }
 }
