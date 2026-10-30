@@ -7,10 +7,6 @@ CLAUDE.local.md
 **/target
 Cargo.lock.orig
 
-# backend/ and frontend/ are their own nested git repos now, not tracked from here
-/backend
-/frontend
-
 # Tauri
 src-tauri/gen/
 src-tauri/target/
