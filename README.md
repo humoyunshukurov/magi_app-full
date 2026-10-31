@@ -107,19 +107,22 @@ updates itself silently - no student action needed.
 ### macOS Gatekeeper
 
 The macOS build isn't notarized by Apple (that needs a paid Apple Developer Program
-membership) - it's not a bug. The actual error students hit is "'MAGI Desktop' is damaged
-and can't be opened. You should move it to the Trash." (not the milder unidentified-developer
-warning, so right-click → Open does nothing here). Clear the quarantine flag instead:
+membership) - it's not a bug. `bundle.macOS.signingIdentity: "-"` in tauri.conf.json ad-hoc
+signs it, which should mean students hit the milder "Apple could not verify this app" warning
+(Privacy & Security → Open Anyway, no Terminal) rather than "is damaged and can't be opened."
+If it still says "damaged", clear the quarantine flag instead:
 
 ```sh
 xattr -cr "/Applications/MAGI Desktop.app"
 ```
 
-To fix this for good, once there's an Apple Developer account: add `APPLE_CERTIFICATE`
+To fix this for good, once there's a real Apple Developer account: add `APPLE_CERTIFICATE`
 (base64 `.p12`), `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
 `APPLE_PASSWORD` (an app-specific password, not the Apple ID's own), and `APPLE_TEAM_ID` as
-repo secrets - `release.yml` already reads them and will notarize automatically the next time
-a version is tagged. Nothing else changes; these are no-ops while unset.
+repo secrets, and add them back to `release.yml`'s `env:` block for the build step - leaving
+any of them declared with no secret behind it breaks the build outright (tauri-action runs
+`security import` the moment the env var exists, even as `""`), which is why they aren't
+declared there right now.
 
 `backend/` is the retired standalone Rust server (kept for history only - the desktop app
 talks to `magi-backend` on Railway, not this).
