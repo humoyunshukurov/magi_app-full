@@ -4,5 +4,7 @@
 <dict>
   <key>NSCameraUsageDescription</key>
   <string>MAGI turns your camera on while you take an exam.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>MAGI listens for nearby talking while you take an exam.</string>
 </dict>
 </plist>
