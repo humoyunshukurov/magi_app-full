@@ -66,18 +66,23 @@ describe("useCameraWatch", () => {
     expect(onEvent).toHaveBeenCalledWith("phone_seen", "A phone is in view of the camera", { image: PHOTO });
   });
 
-  it("takes a photo when a second face is seen", async () => {
-    looks = [{ faces: 2, phone: false, voice: null, turned: null, extraBody: null }];
+  it("takes a photo when a second face is seen on two looks in a row", async () => {
+    looks = [{ faces: 2, phone: false, voice: null, turned: null, extraBody: null }, { faces: 2, phone: null, voice: null, turned: null, extraBody: null }];
     watch();
-    await advance(TICK_MS);
+    await advance(TICK_MS * 2);
 
     expect(onEvent).toHaveBeenCalledWith("extra_person", "2 faces in view of the camera", { image: PHOTO });
   });
 
   it("gives each event kind its own photo budget, so a flood of one kind can't starve another", async () => {
-    // faces=2 reports extra_person with a photo, then two faces=1 looks clear it so it can
-    // fire again - repeated one more time than the budget allows
-    const extraPersonCycle: Look[] = [{ faces: 2, phone: false, voice: null, turned: null, extraBody: null }, { faces: 1, phone: false, voice: null, turned: null, extraBody: null }, { faces: 1, phone: false, voice: null, turned: null, extraBody: null }];
+    // faces=2 reports extra_person with a photo on the second look, then two faces=1 looks clear
+    // it so it can fire again - repeated one more time than the budget allows
+    const extraPersonCycle: Look[] = [
+      { faces: 2, phone: false, voice: null, turned: null, extraBody: null },
+      { faces: 2, phone: false, voice: null, turned: null, extraBody: null },
+      { faces: 1, phone: false, voice: null, turned: null, extraBody: null },
+      { faces: 1, phone: false, voice: null, turned: null, extraBody: null },
+    ];
     looks = [
       ...Array.from({ length: PHOTO_LIMIT + 1 }, () => extraPersonCycle).flat(),
       { faces: 1, phone: true, voice: null, turned: null, extraBody: null },

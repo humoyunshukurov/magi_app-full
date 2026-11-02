@@ -152,41 +152,53 @@ describe("createJudge, a phone", () => {
 });
 
 describe("createJudge, an extra person", () => {
-  it("reports a second face the moment it's seen, not after a few looks", () => {
+  it("doesn't report a second face from a single look - one noisy frame isn't enough", () => {
     const judge = createJudge();
-    expect(judge.feed(twoFaces, 0)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
+    expect(judge.feed(twoFaces, 0)).toEqual([]);
+  });
+
+  it("reports it once a second look in a row confirms it", () => {
+    const judge = createJudge();
+    judge.feed(twoFaces, 0);
+    expect(judge.feed(twoFaces, 500)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
   });
 
   it("doesn't keep reporting while the extra person stays in view", () => {
     const judge = createJudge();
     judge.feed(twoFaces, 0);
+    judge.feed(twoFaces, 500);
     for (let t = 1000; t < 10_000; t += 1000) expect(judge.feed(twoFaces, t)).toEqual([]);
   });
 
   it("reports it again once they've left and come back", () => {
     const judge = createJudge();
     judge.feed(twoFaces, 0);
+    judge.feed(twoFaces, 500);
     judge.feed(face, 1000);
     judge.feed(face, 2000);
-    expect(judge.feed(twoFaces, 3000)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
+    judge.feed(twoFaces, 3000);
+    expect(judge.feed(twoFaces, 3500)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
   });
 
   it("doesn't report it again on a single flicker back to one face", () => {
     const judge = createJudge();
     judge.feed(twoFaces, 0);
+    judge.feed(twoFaces, 500);
     judge.feed(face, 1000);
     expect(judge.feed(twoFaces, 2000)).toEqual([]);
   });
 
   it("is independent of the camera-away and phone checks", () => {
     const judge = createJudge();
-    expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null, extraBody: null }, 0)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
+    judge.feed({ faces: 2, phone: false, voice: null, turned: null, extraBody: null }, 0);
+    expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null, extraBody: null }, 500)).toEqual([{ kind: "extra_person", detail: "2 faces in view of the camera" }]);
     expect(judge.feed({ faces: 2, phone: true, voice: null, turned: null, extraBody: null }, 2000)).toEqual([{ kind: "phone_seen", detail: "A phone is in view of the camera" }]);
   });
 
   it("also reports it from a second person-shaped object, when the face model saw only one face", () => {
     const judge = createJudge();
-    expect(judge.feed(bodySeen, 0)).toEqual([{ kind: "extra_person", detail: "Someone else's shape seen in the background" }]);
+    judge.feed(bodySeen, 0);
+    expect(judge.feed(bodySeen, 500)).toEqual([{ kind: "extra_person", detail: "Someone else's shape seen in the background" }]);
   });
 
   it("doesn't report a body seen alone without it being a second one (the student is a body too)", () => {
@@ -217,6 +229,14 @@ describe("createJudge, talking", () => {
     const judge = createJudge();
     const soloVoice: Look = { faces: 1, phone: false, voice: true, turned: null, extraBody: null };
     for (let t = 0; t < 3000; t += 500) expect(talks(judge.feed(soloVoice, t))).toBe(false);
+  });
+
+  it("also reports it from a second person-shaped object with voice, when the face model saw only one face", () => {
+    const judge = createJudge();
+    const bodyTalking: Look = { faces: 1, phone: false, voice: true, turned: false, extraBody: true };
+    expect(talks(judge.feed(bodyTalking, 0))).toBe(false);
+    expect(talks(judge.feed(bodyTalking, 500))).toBe(false);
+    expect(judge.feed(bodyTalking, 1000)).toContainEqual({ kind: "talking", detail: "Talking with someone next to the camera" });
   });
 
   it("doesn't report it again within the cooldown, even if it flickers", () => {

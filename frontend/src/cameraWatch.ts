@@ -120,8 +120,10 @@ const PHONE_LOOKS = 2;
 const PHONE_GONE_LOOKS = 3;
 /** The same thing isn't reported again this soon. */
 const PHONE_COOLDOWN_MS = 10_000;
-/** A second face is reported the moment it's seen - even a quick walk-by matters here. */
-const EXTRA_PERSON_LOOKS = 1;
+/** Two looks (1s) rather than one - BlazeFace occasionally reports a second face on a single
+ * frame that isn't really there (a reflection, a hand, a bad angle), and a one-look trigger
+ * reports that noise as a confirmed incident just as readily as a real second person. */
+const EXTRA_PERSON_LOOKS = 2;
 /** Looks in a row back down to one face before an extra person can be reported again. */
 const EXTRA_PERSON_GONE_LOOKS = 2;
 /** Looks in a row with a second face AND voice activity at once, at 500ms each - about 1.5s of
@@ -197,8 +199,10 @@ export function createJudge() {
       }
 
       // independent of extra_person's own report/cooldown above - this tracks the current
-      // moment's condition (second face + voice) directly, not whether extra_person already fired
-      if (look.faces > 1 && look.voice) {
+      // moment's condition (second person + voice) directly, not whether extra_person already
+      // fired. Same "is someone else there" signal as extra_person above (face OR object model) -
+      // a second person whose face isn't clearly visible can still be heard.
+      if ((look.faces > 1 || look.extraBody) && look.voice) {
         talkingLooks += 1;
         talkingClearLooks = 0;
         if (talkingLooks >= TALKING_LOOKS && !talkingReported && now - lastTalkingAt >= TALKING_COOLDOWN_MS) {
