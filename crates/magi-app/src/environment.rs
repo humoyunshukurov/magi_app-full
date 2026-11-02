@@ -91,9 +91,11 @@ fn classify_windows(our_pid: u32, windows: impl Iterator<Item = (u32, String, bo
 }
 
 /// Every other app's windows need to be closed before an exam starts, so there's nothing easy to
-/// switch to - checked where the OS actually allows one app to see another's windows.
+/// switch to - checked where the OS actually allows one app to see another's windows. Windows and
+/// macOS have no Wayland-style blind spot, so `process_names` (Linux's fallback - see below) goes
+/// unused here.
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-fn other_windows() -> Vec<String> {
+fn other_windows(_process_names: &[String]) -> Vec<String> {
     let Ok(windows) = xcap::Window::all() else {
         return Vec::new();
     };
@@ -110,18 +112,52 @@ fn other_windows() -> Vec<String> {
     classify_windows(our_pid, info)
 }
 
+/// Editors, office suites and other everyday apps that are neither a browser (its own exemption,
+/// since plenty of students have one open for something legitimate) nor a messenger (same reason)
+/// - the names a Wayland-native process still shows up under in `/proc`, used as a fallback where
+/// the window list below can't see it at all. Checked by exact name: most of these binaries are
+/// short enough that a prefix match would catch unrelated processes.
+const COMMON_NON_BROWSER_APPS: &[&str] = &[
+    "code",
+    "code-insiders",
+    "codium",
+    "cursor",
+    "sublime_text",
+    "atom",
+    "notepad++",
+    "gedit",
+    "kate",
+    "soffice.bin",
+];
+
+/// Process-name fallback for `other_windows` - catches a Wayland-native app's process even when
+/// the window list below can't see its window at all (see that function's doc comment). Not a
+/// full fix: it only knows the apps named above, not arbitrary ones, but it closes the exact gap
+/// that let a student leave an editor open during the test10 attempt.
+fn other_window_processes<'a>(names: impl Iterator<Item = &'a str>) -> Vec<String> {
+    let mut found: Vec<String> = names
+        .map(plain)
+        .filter(|name| COMMON_NON_BROWSER_APPS.contains(&name.as_str()))
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
 /// Same idea on Linux, talking to X11/XWayland directly (`_NET_CLIENT_LIST` on the root window,
 /// `_NET_WM_PID`/`WM_CLASS`/`_NET_WM_STATE` per window - the same properties `xcap` itself reads,
 /// without pulling in its unconditional Linux `pipewire` dependency for a Wayland video-recording
 /// feature this never uses).
 ///
-/// **Real, confirmed gap on a pure-Wayland desktop**: a native Wayland client (tested here with
-/// Firefox and Telegram, both running as Wayland-native apps) never registers with X11 at all, so
-/// it is invisible to this and this check won't see it; an XWayland-backed app (older Electron
-/// builds, some GTK3 apps, this app's own WebKitGTK window) still shows up. Windows and macOS have
-/// no such split.
+/// **Confirmed gap on a pure-Wayland desktop, now covered for known apps**: a native Wayland
+/// client (confirmed here with Firefox and Telegram, both running as Wayland-native apps) never
+/// registers with X11 at all, so it is invisible to the window list below; an XWayland-backed app
+/// (older Electron builds, some GTK3 apps, this app's own WebKitGTK window) still shows up.
+/// `other_window_processes` above closes this for the apps named in `COMMON_NON_BROWSER_APPS` by
+/// checking `/proc` instead, which doesn't care which display protocol a process drew its window
+/// with. Windows and macOS have no such split, so they don't need the fallback.
 #[cfg(target_os = "linux")]
-fn other_windows() -> Vec<String> {
+fn other_windows(process_names: &[String]) -> Vec<String> {
     use xcb::x::{Atom, GetProperty, InternAtom, Window, ATOM_ATOM, ATOM_CARDINAL, ATOM_NONE, ATOM_STRING, ATOM_WM_CLASS};
 
     fn atom(conn: &xcb::Connection, name: &str) -> Option<Atom> {
@@ -132,61 +168,67 @@ fn other_windows() -> Vec<String> {
         }
     }
 
-    let Ok((conn, screen_idx)) = xcb::Connection::connect(None) else {
-        return Vec::new();
-    };
-    let Some(root) = conn.get_setup().roots().nth(screen_idx as usize).map(|s| s.root()) else {
-        return Vec::new();
-    };
-    let Some(client_list) = atom(&conn, "_NET_CLIENT_LIST") else {
-        return Vec::new();
-    };
+    // X11/XWayland may not even be reachable on a pure-Wayland session - that just means this
+    // part contributes nothing, not that the whole check should give up (the process fallback
+    // below still runs).
+    let via_x11: Vec<String> = (|| {
+        let (conn, screen_idx) = xcb::Connection::connect(None).ok()?;
+        let root = conn.get_setup().roots().nth(screen_idx as usize).map(|s| s.root())?;
+        let client_list = atom(&conn, "_NET_CLIENT_LIST")?;
 
-    let windows: Vec<Window> = {
-        let cookie = conn.send_request(&GetProperty {
-            delete: false,
-            window: root,
-            property: client_list,
-            r#type: ATOM_NONE,
-            long_offset: 0,
-            long_length: 1024,
+        let windows: Vec<Window> = {
+            let cookie = conn.send_request(&GetProperty {
+                delete: false,
+                window: root,
+                property: client_list,
+                r#type: ATOM_NONE,
+                long_offset: 0,
+                long_length: 1024,
+            });
+            conn.wait_for_reply(cookie).map(|r| r.value::<Window>().to_vec()).unwrap_or_default()
+        };
+
+        let pid_atom = atom(&conn, "_NET_WM_PID");
+        let state_atom = atom(&conn, "_NET_WM_STATE");
+        let hidden_atom = atom(&conn, "_NET_WM_STATE_HIDDEN");
+        let our_pid = std::process::id();
+
+        let info = windows.into_iter().map(|window| {
+            let pid = pid_atom
+                .and_then(|property| {
+                    let cookie = conn.send_request(&GetProperty { delete: false, window, property, r#type: ATOM_CARDINAL, long_offset: 0, long_length: 4 });
+                    conn.wait_for_reply(cookie).ok().and_then(|r| r.value::<u32>().first().copied())
+                })
+                .unwrap_or(our_pid);
+
+            let name = {
+                let cookie = conn.send_request(&GetProperty { delete: false, window, property: ATOM_WM_CLASS, r#type: ATOM_STRING, long_offset: 0, long_length: 1024 });
+                let class = conn.wait_for_reply(cookie).map(|r| String::from_utf8_lossy(r.value()).into_owned()).unwrap_or_default();
+                // WM_CLASS holds two NUL-separated strings (instance, class) - the class name reads
+                // like an app name ("Firefox", not "Navigator").
+                class.split('\u{0}').nth(1).unwrap_or("").to_string()
+            };
+
+            let minimized = match (state_atom, hidden_atom) {
+                (Some(property), Some(hidden)) => {
+                    let cookie = conn.send_request(&GetProperty { delete: false, window, property, r#type: ATOM_ATOM, long_offset: 0, long_length: 12 });
+                    conn.wait_for_reply(cookie).map(|r| r.value::<Atom>().contains(&hidden)).unwrap_or(false)
+                }
+                _ => false,
+            };
+
+            (pid, name, minimized)
         });
-        conn.wait_for_reply(cookie).map(|r| r.value::<Window>().to_vec()).unwrap_or_default()
-    };
 
-    let pid_atom = atom(&conn, "_NET_WM_PID");
-    let state_atom = atom(&conn, "_NET_WM_STATE");
-    let hidden_atom = atom(&conn, "_NET_WM_STATE_HIDDEN");
-    let our_pid = std::process::id();
+        Some(classify_windows(our_pid, info))
+    })()
+    .unwrap_or_default();
 
-    let info = windows.into_iter().map(|window| {
-        let pid = pid_atom
-            .and_then(|property| {
-                let cookie = conn.send_request(&GetProperty { delete: false, window, property, r#type: ATOM_CARDINAL, long_offset: 0, long_length: 4 });
-                conn.wait_for_reply(cookie).ok().and_then(|r| r.value::<u32>().first().copied())
-            })
-            .unwrap_or(our_pid);
-
-        let name = {
-            let cookie = conn.send_request(&GetProperty { delete: false, window, property: ATOM_WM_CLASS, r#type: ATOM_STRING, long_offset: 0, long_length: 1024 });
-            let class = conn.wait_for_reply(cookie).map(|r| String::from_utf8_lossy(r.value()).into_owned()).unwrap_or_default();
-            // WM_CLASS holds two NUL-separated strings (instance, class) - the class name reads
-            // like an app name ("Firefox", not "Navigator").
-            class.split('\u{0}').nth(1).unwrap_or("").to_string()
-        };
-
-        let minimized = match (state_atom, hidden_atom) {
-            (Some(property), Some(hidden)) => {
-                let cookie = conn.send_request(&GetProperty { delete: false, window, property, r#type: ATOM_ATOM, long_offset: 0, long_length: 12 });
-                conn.wait_for_reply(cookie).map(|r| r.value::<Atom>().contains(&hidden)).unwrap_or(false)
-            }
-            _ => false,
-        };
-
-        (pid, name, minimized)
-    });
-
-    classify_windows(our_pid, info)
+    let mut all = via_x11;
+    all.extend(other_window_processes(process_names.iter().map(String::as_str)));
+    all.sort();
+    all.dedup();
+    all
 }
 
 pub fn report(app: &tauri::AppHandle) -> EnvironmentReport {
@@ -212,7 +254,7 @@ pub fn report(app: &tauri::AppHandle) -> EnvironmentReport {
         ),
         forbidden_apps,
         browsers,
-        other_windows: other_windows(),
+        other_windows: other_windows(&names),
         other_windows_allowed: allows_other_windows(
             std::env::var_os("MAGI_ALLOW_OTHER_WINDOWS").as_deref(),
         ),
@@ -297,5 +339,19 @@ mod tests {
         ]);
         assert!(forbidden.is_empty());
         assert!(browsers.is_empty());
+    }
+
+    #[test]
+    fn catches_a_wayland_native_editor_by_process_name_even_with_no_window_list() {
+        // what the window-list check on Linux can't see for a Wayland-native app (see
+        // other_windows' doc comment) - this is exactly what let test10 through
+        assert_eq!(other_window_processes(["Code", "magi-desktop"].into_iter()), ["code"]);
+    }
+
+    #[test]
+    fn process_fallback_leaves_browsers_and_messengers_alone() {
+        // deliberately exempt elsewhere (students legitimately have these open) - the fallback
+        // must not quietly start blocking on them
+        assert!(other_window_processes(["firefox", "chrome", "telegram-desktop", "discord"].into_iter()).is_empty());
     }
 }
