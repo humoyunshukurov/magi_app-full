@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { UserSummary } from "./api";
+import { setUpdating } from "./updateState";
 import { AuthPanel } from "./AuthPanel";
 import { GradesPage } from "./GradesPage";
 
@@ -23,18 +24,22 @@ export function App() {
     if (!next) setPage("exams");
   }, []);
 
-  // ADR-0008: checked once per launch, before anything else the student might do - an exam is
-  // never interrupted mid-attempt, since a relaunch only happens here, at startup. Windows exits
-  // the app itself after installing; macOS/Linux need the explicit relaunch below.
+  // ADR-0008: checked once per launch. The download runs in the background rather than blocking
+  // this effect's caller, so PreExam's environment check holds the exam back with setUpdating
+  // until it's done - otherwise a student could start an exam mid-download and get pulled into a
+  // relaunch partway through it. Windows exits the app itself after installing; macOS/Linux need
+  // the explicit relaunch below.
   useEffect(() => {
     (async () => {
       try {
         const update = await check();
         if (!update) return;
+        setUpdating(true);
         await update.downloadAndInstall();
         await relaunch();
       } catch (e) {
         console.error("update check failed:", e);
+        setUpdating(false);
       }
     })();
   }, []);

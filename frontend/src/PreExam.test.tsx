@@ -5,10 +5,12 @@ import { checkIdentity, getMyIdNumber } from "./api";
 import { loadDetector } from "./cameraWatch";
 import { environmentCheck, screenshotTake } from "./ipc";
 import { useCamera } from "./useCamera";
+import { isUpdating } from "./updateState";
 
 vi.mock("./ipc", () => ({ environmentCheck: vi.fn(), screenshotTake: vi.fn() }));
 vi.mock("./api", () => ({ checkIdentity: vi.fn(), getMyIdNumber: vi.fn() }));
 vi.mock("./cameraWatch", () => ({ loadDetector: vi.fn() }));
+vi.mock("./updateState", () => ({ isUpdating: vi.fn(() => false) }));
 vi.mock("./useCamera", async () => {
   const { createElement } = await import("react");
   return { useCamera: vi.fn(), CameraPicture: () => createElement("div", { "aria-label": "Your camera" }) };
@@ -53,6 +55,7 @@ beforeEach(() => {
   // no ID number assigned by default - every pre-existing test types an arbitrary ID and relies
   // on it going through unchecked, same as before this feature existed
   vi.mocked(getMyIdNumber).mockResolvedValue(null);
+  vi.mocked(isUpdating).mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -96,7 +99,8 @@ describe("PreExam, the computer", () => {
     open();
     await flush();
 
-    expect(screen.getByRole("alert").textContent).toContain("2 screens are connected. Disconnect all but one.");
+    expect(screen.getByRole("alert").textContent).toContain("2 screens are connected");
+    expect(screen.getByRole("alert").textContent).toContain("disconnect all but one");
     expect(screen.queryByText("Who is taking the exam")).toBeNull();
   });
 
@@ -120,7 +124,17 @@ describe("PreExam, the computer", () => {
     open();
     await flush();
 
-    expect(screen.getByRole("alert").textContent).toContain("anydesk is running. Close it.");
+    expect(screen.getByRole("alert").textContent).toContain("anydesk is running");
+    expect(screen.getByRole("alert").textContent).toContain("remotely");
+  });
+
+  it("stops while an update is downloading in the background", async () => {
+    vi.mocked(isUpdating).mockReturnValue(true);
+    open();
+    await flush();
+
+    expect(screen.getByRole("alert").textContent).toContain("An update is downloading");
+    expect(screen.queryByText("Who is taking the exam")).toBeNull();
   });
 
   it("stops while other windows are still open, and says which", async () => {
@@ -128,7 +142,8 @@ describe("PreExam, the computer", () => {
     open();
     await flush();
 
-    expect(screen.getByRole("alert").textContent).toContain("Other windows are open: Firefox, Telegram. Close them before starting.");
+    expect(screen.getByRole("alert").textContent).toContain("Other windows are open: Firefox, Telegram");
+    expect(screen.getByRole("alert").textContent).toContain("close them before starting");
   });
 
   it("lets other windows through on a developer's computer, but still stops at a forbidden app", async () => {
