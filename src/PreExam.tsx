@@ -9,6 +9,32 @@ import type { EnvironmentReport } from "./generated/EnvironmentReport";
 import { environmentCheck, screenshotTake } from "./ipc";
 import { inputClass, primaryButtonClass } from "./ui";
 import { CameraPicture, useCamera } from "./useCamera";
+import { isUpdating } from "./updateState";
+
+// mirrors environment.rs's FORBIDDEN_PREFIXES/FORBIDDEN_EXACT - what each one actually does,
+// so the student knows why it blocks the exam instead of just that it does
+const APP_REASONS: Record<string, string> = {
+  teamviewer: "lets someone else see and control your screen remotely",
+  anydesk: "lets someone else see and control your screen remotely",
+  rustdesk: "lets someone else see and control your screen remotely",
+  ultraviewer: "lets someone else see and control your screen remotely",
+  parsec: "lets someone else see and control your screen remotely",
+  remoting_host: "lets someone else see and control your screen remotely",
+  x11vnc: "lets someone else see and control your screen remotely",
+  vncviewer: "lets someone else see and control your screen remotely",
+  vncserver: "lets someone else see and control your screen remotely",
+  tigervnc: "lets someone else see and control your screen remotely",
+  zoom: "can share your screen with someone else",
+  simplescreen: "records your screen",
+  vokoscreen: "records your screen",
+  kazam: "records your screen",
+  obs: "records your screen",
+  obs64: "records your screen",
+  "obs-studio": "records your screen",
+  peek: "records your screen",
+  camtasia: "records your screen",
+  bandicam: "records your screen",
+};
 
 export interface CheckIn {
   /** Empty when an exam that was already running is picked up again. */
@@ -26,9 +52,21 @@ const secondaryButtonClass =
 
 function problemsOf(report: EnvironmentReport): string[] {
   const problems: string[] = [];
-  if (report.monitor_count > 1 && !report.extra_screens_allowed) problems.push(`${report.monitor_count} screens are connected. Disconnect all but one.`);
-  for (const app of report.forbidden_apps) problems.push(`${app} is running. Close it.`);
-  if (report.other_windows.length > 0 && !report.other_windows_allowed) problems.push(`Other windows are open: ${report.other_windows.join(", ")}. Close them before starting.`);
+  if (report.monitor_count > 1 && !report.extra_screens_allowed) {
+    problems.push(
+      `${report.monitor_count} screens are connected. A second screen could show answers or a lookup outside the exam - disconnect all but one.`,
+    );
+  }
+  for (const app of report.forbidden_apps) {
+    const reason = APP_REASONS[app] ?? "could be used to get help during the exam";
+    problems.push(`${app} is running, which ${reason}. Close it before starting.`);
+  }
+  if (report.other_windows.length > 0 && !report.other_windows_allowed) {
+    problems.push(
+      `Other windows are open: ${report.other_windows.join(", ")}. Anything else open could be used to look something up or message someone during the exam - close them before starting.`,
+    );
+  }
+  if (isUpdating()) problems.push("An update is downloading in the background. Wait a moment for it to finish, then try again.");
   return problems;
 }
 
