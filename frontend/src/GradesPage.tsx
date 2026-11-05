@@ -125,7 +125,7 @@ export function GradesPage({ token, visible }: { token: string; visible: boolean
         </div>
       )}
 
-      {attempts === null ? (
+      {error ? null : attempts === null ? (
         <p className="text-sm text-magi-secondary font-light">Loading…</p>
       ) : attempts.length === 0 ? (
         <p className="text-sm text-magi-secondary font-light">You haven&apos;t started an exam yet.</p>
