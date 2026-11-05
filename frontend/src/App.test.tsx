@@ -30,8 +30,8 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe("App navigation", () => {
-  it("offers Exams and Grades only while signed in", async () => {
+describe("App", () => {
+  it("signs in and shows the exam list, with no sidebar at all", async () => {
     queueFetch([
       { status: 200, body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } },
       { status: 200, body: { success: true, exams: [] } },
@@ -40,21 +40,18 @@ describe("App navigation", () => {
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Sign In" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Grades" })).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "s@example.com" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Test1234!" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
-    await screen.findByRole("button", { name: "Grades" });
-    expect(screen.getByRole("button", { name: "Exams" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Activity" })).toBeNull();
+    await screen.findByText("No exams assigned yet.");
+    expect(screen.queryByRole("navigation")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
     await screen.findByRole("heading", { name: "Sign In" });
-    expect(screen.queryByRole("button", { name: "Grades" })).toBeNull();
   });
 
-  it("takes the sidebar away while an exam is open", async () => {
+  it("hides the header and footer while an exam is open", async () => {
     const exam = { id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
     const attempt = {
       id: 28, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
@@ -81,42 +78,13 @@ describe("App navigation", () => {
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Test1234!" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
     fireEvent.click(await screen.findByRole("button", { name: "Start" }));
-    // the checks before the exam count too
-    expect(screen.queryByRole("button", { name: "Grades" })).toBeNull();
+    expect(screen.getByText("MAGI Desktop").closest("header")).toHaveProperty("hidden", true);
     fireEvent.click(await screen.findByRole("button", { name: "Begin" }));
     await screen.findByText("Is this a test?");
-
-    expect(screen.queryByRole("button", { name: "Grades" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Exams" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Yes" }));
     fireEvent.click(screen.getByRole("button", { name: "Submit attempt" }));
     await screen.findByText("Your answers were submitted.");
-    expect(screen.getByRole("button", { name: "Grades" })).toBeTruthy();
-  });
-
-  it("shows a graded exam's score and feedback on the Grades page", async () => {
-    const exam = { id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
-    const gradedAttempt = {
-      id: 90, exam_id: 15, status: "graded", started_at: null, submitted_at: "2026-01-01T00:10:00Z", auto_submitted: false,
-      session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:11:00Z", remaining_seconds: 0, exam,
-      score: 8, passed: true, feedback: "Clear and well argued.",
-    };
-    queueFetch([
-      { status: 200, body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } },
-      { status: 200, body: { success: true, exams: [exam] } },
-      { status: 200, body: { success: true, attempts: [gradedAttempt] } },
-    ]);
-
-    render(<App />);
-    fireEvent.change(await screen.findByLabelText("Email Address"), { target: { value: "s@example.com" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Test1234!" } });
-    fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
-
-    fireEvent.click(await screen.findByRole("button", { name: "Grades" }));
-    await screen.findByText("Your exam was graded");
-    expect(screen.getByText("8/10")).toBeTruthy();
-    // shown both in the "new grade" banner and the persistent attempts list below it
-    expect(screen.getAllByText(/Clear and well argued/).length).toBeGreaterThan(0);
+    expect(screen.getByText("MAGI Desktop").closest("header")).toHaveProperty("hidden", false);
   });
 });
