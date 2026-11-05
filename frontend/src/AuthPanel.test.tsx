@@ -70,15 +70,12 @@ function signIn() {
 }
 
 describe("AuthPanel", () => {
-  it("copies the test account to the clipboard when clicked, and says so briefly", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-
+  it("fills the email and password fields with the test account when clicked", () => {
     render(<AuthPanel />);
     fireEvent.click(screen.getByRole("button", { name: /Test account/ }));
 
-    expect(writeText).toHaveBeenCalledWith("humoyun@test.com / 123456");
-    await screen.findByText("Copied!");
+    expect((screen.getByLabelText("Email Address") as HTMLInputElement).value).toBe("humoyun@test.com");
+    expect((screen.getByLabelText("Password") as HTMLInputElement).value).toBe("123456");
   });
 
   it("logs in, lists exams, starts an attempt, answers, and submits to a graded result", async () => {
