@@ -18,7 +18,6 @@ const APP_REASONS: Record<string, string> = {
   anydesk: "lets someone else see and control your screen remotely",
   rustdesk: "lets someone else see and control your screen remotely",
   ultraviewer: "lets someone else see and control your screen remotely",
-  parsec: "lets someone else see and control your screen remotely",
   remoting_host: "lets someone else see and control your screen remotely",
   x11vnc: "lets someone else see and control your screen remotely",
   vncviewer: "lets someone else see and control your screen remotely",

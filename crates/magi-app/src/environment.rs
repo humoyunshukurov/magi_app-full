@@ -6,13 +6,15 @@ use magi_types::EnvironmentReport;
 use sysinfo::{ProcessesToUpdate, System};
 
 /// Remote control and screen sharing/recording tools, matched on the start of the process name.
-/// Messengers are left out on purpose: plenty of students have one open all day.
+/// Messengers are left out on purpose: plenty of students have one open all day. Parsec is left
+/// out too: macOS ships its own unrelated system daemon under the identical process name
+/// (`parsecd`, reportedly behind Siri/Spotlight suggestions), so this flagged it on every Mac
+/// regardless of whether the real app was even installed.
 const FORBIDDEN_PREFIXES: &[&str] = &[
     "teamviewer",
     "anydesk",
     "rustdesk",
     "ultraviewer",
-    "parsec",
     "remoting_host",
     "x11vnc",
     "vncviewer",
@@ -37,13 +39,6 @@ const BROWSERS: &[&str] = &[
     "vivaldi",
     "safari",
 ];
-
-/// Whether a `parsec`-prefixed process's own executable path is really the user-installed Parsec
-/// app, not macOS's unrelated system daemon of the identical process name (`parsecd`, reportedly
-/// behind Siri/Spotlight suggestions) - `report()` only calls this on macOS, where the two collide.
-fn is_real_parsec_path(exe: &str) -> bool {
-    exe.contains("Parsec.app")
-}
 
 fn plain(name: &str) -> String {
     let lower = name.to_lowercase();
@@ -265,20 +260,6 @@ pub fn report(app: &tauri::AppHandle) -> EnvironmentReport {
         .map(|p| p.name().to_string_lossy().into_owned())
         .collect();
     let (forbidden_apps, browsers) = classify(names.iter().map(String::as_str));
-    #[cfg(target_os = "macos")]
-    let forbidden_apps = {
-        let mut forbidden_apps = forbidden_apps;
-        if forbidden_apps.iter().any(|f| f == "parsec") {
-            let real_parsec_running = system.processes().values().any(|p| {
-                plain(&p.name().to_string_lossy()).starts_with("parsec")
-                    && p.exe().and_then(|e| e.to_str()).is_some_and(is_real_parsec_path)
-            });
-            if !real_parsec_running {
-                forbidden_apps.retain(|f| f != "parsec");
-            }
-        }
-        forbidden_apps
-    };
 
     // if the screens can't be counted, don't hold the student back for it
     let monitor_count = app
@@ -382,13 +363,6 @@ mod tests {
         assert!(is_shell_window("Windows Explorer", "   "));
         assert!(!is_shell_window("Windows Explorer", "Documents"));
         assert!(!is_shell_window("Firefox", ""));
-    }
-
-    #[test]
-    fn only_the_real_parsec_app_s_path_counts() {
-        assert!(is_real_parsec_path("/Applications/Parsec.app/Contents/MacOS/parsecd"));
-        assert!(!is_real_parsec_path("/usr/libexec/parsecd"));
-        assert!(!is_real_parsec_path(""));
     }
 
     #[test]
