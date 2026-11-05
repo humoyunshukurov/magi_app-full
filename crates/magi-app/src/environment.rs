@@ -38,6 +38,13 @@ const BROWSERS: &[&str] = &[
     "safari",
 ];
 
+/// Whether a `parsec`-prefixed process's own executable path is really the user-installed Parsec
+/// app, not macOS's unrelated system daemon of the identical process name (`parsecd`, reportedly
+/// behind Siri/Spotlight suggestions) - `report()` only calls this on macOS, where the two collide.
+fn is_real_parsec_path(exe: &str) -> bool {
+    exe.contains("Parsec.app")
+}
+
 fn plain(name: &str) -> String {
     let lower = name.to_lowercase();
     lower.strip_suffix(".exe").unwrap_or(&lower).to_string()
@@ -76,14 +83,33 @@ fn allows_other_windows(value: Option<&std::ffi::OsStr>) -> bool {
     value.is_some_and(|v| v == "1")
 }
 
-/// Names of other apps' visible windows, given each window's owning pid, name, and whether it's
-/// minimized - pulled out so the filtering can be tested without a real window list. Only
-/// `other_windows()` below calls it for real, on the platforms that have one.
+/// A window that's really the OS shell's own always-on-screen furniture - macOS's compositor, or
+/// the hidden desktop/taskbar host `explorer.exe` keeps around on Windows - not something the
+/// student opened and could switch to. Matched on both the owning app's name and the window's own
+/// title, so a genuine window from the same app (an actual File Explorer folder, say) still gets
+/// caught: only `explorer.exe`'s titleless housekeeping window is exempt, not every one of its
+/// windows.
+fn is_shell_window(app_name: &str, title: &str) -> bool {
+    match app_name {
+        "Window Server" => true,
+        "Windows Explorer" => title.trim().is_empty(),
+        _ => false,
+    }
+}
+
+/// Names of other apps' visible windows, given each window's owning pid, app name, title, and
+/// whether it's minimized - pulled out so the filtering can be tested without a real window list.
+/// Only `other_windows()` below calls it for real, on the platforms that have one.
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux", test))]
-fn classify_windows(our_pid: u32, windows: impl Iterator<Item = (u32, String, bool)>) -> Vec<String> {
+fn classify_windows(our_pid: u32, windows: impl Iterator<Item = (u32, String, String, bool)>) -> Vec<String> {
     let mut names: Vec<String> = windows
-        .filter(|(pid, name, minimized)| *pid != our_pid && !*minimized && !name.trim().is_empty())
-        .map(|(_, name, _)| name)
+        .filter(|(pid, app_name, title, minimized)| {
+            *pid != our_pid
+                && !*minimized
+                && !(app_name.trim().is_empty() && title.trim().is_empty())
+                && !is_shell_window(app_name, title)
+        })
+        .map(|(_, app_name, title, _)| if !app_name.trim().is_empty() { app_name } else { title })
         .collect();
     names.sort();
     names.dedup();
@@ -101,13 +127,9 @@ fn other_windows(_process_names: &[String]) -> Vec<String> {
     };
     let our_pid = std::process::id();
     let info = windows.iter().map(|w| {
-        let name = w
-            .app_name()
-            .ok()
-            .filter(|s| !s.is_empty())
-            .or_else(|| w.title().ok())
-            .unwrap_or_default();
-        (w.pid().unwrap_or(our_pid), name, w.is_minimized().unwrap_or(false))
+        let app_name = w.app_name().ok().filter(|s| !s.is_empty()).unwrap_or_default();
+        let title = w.title().unwrap_or_default();
+        (w.pid().unwrap_or(our_pid), app_name, title, w.is_minimized().unwrap_or(false))
     });
     classify_windows(our_pid, info)
 }
@@ -217,7 +239,10 @@ fn other_windows(process_names: &[String]) -> Vec<String> {
                 _ => false,
             };
 
-            (pid, name, minimized)
+            // X11's WM_CLASS gives one name, not a separate app-name/title split like xcap does -
+            // passed as both, same as before this needed splitting at all (is_shell_window only
+            // ever matches macOS/Windows app names, so this is a no-op here).
+            (pid, name.clone(), name, minimized)
         });
 
         Some(classify_windows(our_pid, info))
@@ -240,6 +265,20 @@ pub fn report(app: &tauri::AppHandle) -> EnvironmentReport {
         .map(|p| p.name().to_string_lossy().into_owned())
         .collect();
     let (forbidden_apps, browsers) = classify(names.iter().map(String::as_str));
+    #[cfg(target_os = "macos")]
+    let forbidden_apps = {
+        let mut forbidden_apps = forbidden_apps;
+        if forbidden_apps.iter().any(|f| f == "parsec") {
+            let real_parsec_running = system.processes().values().any(|p| {
+                plain(&p.name().to_string_lossy()).starts_with("parsec")
+                    && p.exe().and_then(|e| e.to_str()).is_some_and(is_real_parsec_path)
+            });
+            if !real_parsec_running {
+                forbidden_apps.retain(|f| f != "parsec");
+            }
+        }
+        forbidden_apps
+    };
 
     // if the screens can't be counted, don't hold the student back for it
     let monitor_count = app
@@ -317,13 +356,39 @@ mod tests {
     #[test]
     fn finds_other_visible_windows_but_not_our_own_minimized_or_untitled_ones() {
         let windows = [
-            (100, "Firefox".to_string(), false),
-            (100, "Firefox".to_string(), false), // same app, two windows - deduped
-            (200, String::new(), false),         // no title - ignored
-            (300, "Telegram".to_string(), true), // minimized - ignored
-            (999, "KompyuterMagi".to_string(), false), // our own pid - ignored
+            (100, "Firefox".to_string(), String::new(), false),
+            (100, "Firefox".to_string(), String::new(), false), // same app, two windows - deduped
+            (200, String::new(), String::new(), false),         // no title - ignored
+            (300, "Telegram".to_string(), String::new(), true), // minimized - ignored
+            (999, "KompyuterMagi".to_string(), String::new(), false), // our own pid - ignored
         ];
         assert_eq!(classify_windows(999, windows.into_iter()), ["Firefox"]);
+    }
+
+    #[test]
+    fn exempts_only_the_os_shell_s_own_housekeeping_window_not_every_window_it_owns() {
+        let windows = [
+            (100, "Window Server".to_string(), String::new(), false), // macOS's own compositor
+            (200, "Windows Explorer".to_string(), String::new(), false), // the hidden desktop/taskbar host
+            (300, "Windows Explorer".to_string(), "Documents".to_string(), false), // a real folder window
+        ];
+        assert_eq!(classify_windows(999, windows.into_iter()), ["Windows Explorer"]);
+    }
+
+    #[test]
+    fn is_shell_window_only_matches_known_shell_app_names() {
+        assert!(is_shell_window("Window Server", ""));
+        assert!(is_shell_window("Windows Explorer", ""));
+        assert!(is_shell_window("Windows Explorer", "   "));
+        assert!(!is_shell_window("Windows Explorer", "Documents"));
+        assert!(!is_shell_window("Firefox", ""));
+    }
+
+    #[test]
+    fn only_the_real_parsec_app_s_path_counts() {
+        assert!(is_real_parsec_path("/Applications/Parsec.app/Contents/MacOS/parsecd"));
+        assert!(!is_real_parsec_path("/usr/libexec/parsecd"));
+        assert!(!is_real_parsec_path(""));
     }
 
     #[test]
