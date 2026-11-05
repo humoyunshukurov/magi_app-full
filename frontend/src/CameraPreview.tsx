@@ -1,5 +1,5 @@
-// The webcam, on for as long as an exam is open. It is only shown to the student for now;
-// nothing is recorded or sent anywhere.
+// The webcam, on for as long as an exam is open. The picture is only shown to the student, never
+// recorded or sent anywhere - the microphone alongside it is a separate story, see useMicrophone.ts.
 
 import { useRef, useState } from "react";
 import { CameraPicture, useCamera, type CameraEventKind } from "./useCamera";

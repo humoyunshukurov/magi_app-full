@@ -325,6 +325,7 @@ const cheatingTypeSchema = z.enum([
   "extra_person",
   "talking",
   "looking_away",
+  "background_noise",
 ]);
 export type CheatingType = z.infer<typeof cheatingTypeSchema>;
 
@@ -342,15 +343,17 @@ export async function reportCheating(token: string, attemptId: number, name: Che
   return envelope.cheating;
 }
 
-export type MonitoringKind = "panoramic-views" | "video-recordings" | "face-snapshots" | "snapshots";
+export type MonitoringKind = "panoramic-views" | "video-recordings" | "face-snapshots" | "snapshots" | "audio-recordings";
 const mediaRecordSchema = z.object({ id: z.number(), url: z.string(), label: z.string().nullable(), created_at: z.string() });
 
-/** Uploads one photo (a `data:image/jpeg;base64,...` string) so staff can see it without the student's own machine. */
-export async function uploadMedia(token: string, attemptId: number, kind: MonitoringKind, image: string, label?: string) {
+/** Uploads one photo (a `data:image/jpeg;base64,...` string), or for `audio-recordings` one clip
+ * (a `data:audio/webm;base64,...` string), so staff can see/hear it without the student's own machine. */
+export async function uploadMedia(token: string, attemptId: number, kind: MonitoringKind, payload: string, label?: string) {
+  const body = kind === "audio-recordings" ? { audio: payload, label } : { image: payload, label };
   const envelope = await request(
     `/api/monitoring/attempts/${attemptId}/${kind}`,
     z.object({ success: z.literal(true), media: mediaRecordSchema }),
-    { method: "POST", body: JSON.stringify({ image, label }) },
+    { method: "POST", body: JSON.stringify(body) },
     token,
   );
   return envelope.media;

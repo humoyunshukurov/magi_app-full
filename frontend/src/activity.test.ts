@@ -8,6 +8,7 @@ vi.mock("./api", () => ({ reportCheating: vi.fn(), uploadMedia: vi.fn() }));
 
 const CTX: ActivityContext = { userId: 1, token: "tok", attemptId: 9, examName: "Algorithms" };
 const PHOTO = "data:image/jpeg;base64,PHOTO";
+const AUDIO = "data:audio/webm;base64,AUDIO";
 
 beforeEach(() => {
   vi.mocked(activityLog).mockResolvedValue(undefined);
@@ -71,6 +72,29 @@ describe("logActivity", () => {
 
     expect(reportCheating).toHaveBeenCalled(); // it is still a cheating kind
     expect(uploadMedia).not.toHaveBeenCalled(); // but not a photo kind
+  });
+
+  it("reports background_noise as a cheating-kind event and uploads its clip as audio-recordings", async () => {
+    logActivity(CTX, "background_noise", "Constant sound picked up from outside the exam", { data: { audio: AUDIO } });
+    await flush();
+
+    expect(reportCheating).toHaveBeenCalledWith("tok", 9, "background_noise", "Constant sound picked up from outside the exam");
+    expect(uploadMedia).toHaveBeenCalledWith("tok", 9, "audio-recordings", AUDIO, "Constant sound picked up from outside the exam");
+  });
+
+  it("uploads nothing for background_noise when the data has no audio", async () => {
+    logActivity(CTX, "background_noise", "Constant sound picked up from outside the exam", { data: {} });
+    await flush();
+
+    expect(uploadMedia).not.toHaveBeenCalled();
+  });
+
+  it("never uploads audio for a kind that isn't an audio kind, even if data happens to carry one", async () => {
+    logActivity(CTX, "phone_seen", "A phone is in view of the camera", { data: { image: PHOTO, audio: AUDIO } });
+    await flush();
+
+    expect(uploadMedia).toHaveBeenCalledWith("tok", 9, "snapshots", PHOTO, "A phone is in view of the camera");
+    expect(uploadMedia).not.toHaveBeenCalledWith("tok", 9, "audio-recordings", AUDIO, expect.anything());
   });
 
   it("retries a failed sync once, silently, instead of losing it", async () => {

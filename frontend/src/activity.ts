@@ -43,7 +43,8 @@ export type ActivityKind =
   | "extra_person"
   | "screenshot"
   | "screenshot_failed"
-  | "app_closed";
+  | "app_closed"
+  | "background_noise";
 
 export interface ActivityContext {
   userId: number;
@@ -67,10 +68,14 @@ const CHEATING_KIND: Partial<Record<ActivityKind, CheatingType>> = {
   extra_person: "extra_person",
   talking: "talking",
   looking_away: "looking_away",
+  background_noise: "background_noise",
 };
 
 // kinds whose `data.image` is a suspicious-moment photo worth keeping on the server too
 const PHOTO_KIND = new Set<ActivityKind>(["phone_seen", "camera_away", "extra_person", "talking", "looking_away", "screenshot"]);
+
+// kinds whose `data.audio` is a recorded clip worth keeping on the server too
+const AUDIO_KIND = new Set<ActivityKind>(["background_noise"]);
 
 // a proctoring sync (cheating report, snapshot upload) is worth one retry after a transient
 // network blip before giving up - still fire-and-forget from the caller's point of view
@@ -109,5 +114,10 @@ export function logActivity(
   const image = extra.data?.image;
   if (PHOTO_KIND.has(kind) && typeof image === "string") {
     syncOnce(`uploadMedia(${kind})`, () => uploadMedia(ctx.token, ctx.attemptId, "snapshots", image, detail));
+  }
+
+  const audio = extra.data?.audio;
+  if (AUDIO_KIND.has(kind) && typeof audio === "string") {
+    syncOnce(`uploadMedia(${kind})`, () => uploadMedia(ctx.token, ctx.attemptId, "audio-recordings", audio, detail));
   }
 }
