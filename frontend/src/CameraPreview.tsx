@@ -2,6 +2,7 @@
 // recorded or sent anywhere - the microphone alongside it is a separate story, see useMicrophone.ts.
 
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CameraPicture, useCamera, type CameraEventKind } from "./useCamera";
 import { useCameraWatch, type WatchEventKind } from "./useCameraWatch";
 import { useMicrophone, type MicEventKind } from "./useMicrophone";
@@ -22,6 +23,7 @@ export function CameraPreview({
 }: {
   onEvent: (kind: PreviewEventKind, detail: string, data?: Record<string, unknown>) => void;
 }) {
+  const { t } = useTranslation();
   const camera = useCamera(onEvent);
   const mic = useMicrophone(onEvent);
 
@@ -57,7 +59,7 @@ export function CameraPreview({
   if (camera.problem) {
     return (
       <div role="alert" className="fixed bottom-4 right-4 z-40 w-64 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-magi-destructive">
-        Camera isn't available ({camera.problem}). The exam goes on, and this is recorded.
+        {t("cameraPreview.unavailable", { reason: camera.problem })}
       </div>
     );
   }
@@ -74,7 +76,7 @@ export function CameraPreview({
       <CameraPicture camera={camera} />
       <p className="px-2 py-1 bg-magi-white text-[11px] font-semibold text-magi-primary flex items-center gap-1.5">
         <span className="w-1.5 h-1.5 rounded-full bg-magi-destructive" />
-        {camera.source === null ? "Starting camera…" : "Camera on"}
+        {camera.source === null ? t("cameraPreview.starting") : t("cameraPreview.on")}
       </p>
     </div>
   );

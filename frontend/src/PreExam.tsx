@@ -3,6 +3,8 @@
 // camera takes one photo of them with their ID card. The exam clock only starts after this.
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import i18next from "./i18n";
 import { checkIdentity, getMyIdNumber } from "./api";
 import { loadDetector } from "./cameraWatch";
 import type { EnvironmentReport } from "./generated/EnvironmentReport";
@@ -13,26 +15,26 @@ import { isUpdating } from "./updateState";
 
 // mirrors environment.rs's FORBIDDEN_PREFIXES/FORBIDDEN_EXACT - what each one actually does,
 // so the student knows why it blocks the exam instead of just that it does
-const APP_REASONS: Record<string, string> = {
-  teamviewer: "lets someone else see and control your screen remotely",
-  anydesk: "lets someone else see and control your screen remotely",
-  rustdesk: "lets someone else see and control your screen remotely",
-  ultraviewer: "lets someone else see and control your screen remotely",
-  remoting_host: "lets someone else see and control your screen remotely",
-  x11vnc: "lets someone else see and control your screen remotely",
-  vncviewer: "lets someone else see and control your screen remotely",
-  vncserver: "lets someone else see and control your screen remotely",
-  tigervnc: "lets someone else see and control your screen remotely",
-  zoom: "can share your screen with someone else",
-  simplescreen: "records your screen",
-  vokoscreen: "records your screen",
-  kazam: "records your screen",
-  obs: "records your screen",
-  obs64: "records your screen",
-  "obs-studio": "records your screen",
-  peek: "records your screen",
-  camtasia: "records your screen",
-  bandicam: "records your screen",
+const APP_REASON_KEYS: Record<string, string> = {
+  teamviewer: "preExam.appReasons.remoteControl",
+  anydesk: "preExam.appReasons.remoteControl",
+  rustdesk: "preExam.appReasons.remoteControl",
+  ultraviewer: "preExam.appReasons.remoteControl",
+  remoting_host: "preExam.appReasons.remoteControl",
+  x11vnc: "preExam.appReasons.remoteControl",
+  vncviewer: "preExam.appReasons.remoteControl",
+  vncserver: "preExam.appReasons.remoteControl",
+  tigervnc: "preExam.appReasons.remoteControl",
+  zoom: "preExam.appReasons.screenShare",
+  simplescreen: "preExam.appReasons.screenRecord",
+  vokoscreen: "preExam.appReasons.screenRecord",
+  kazam: "preExam.appReasons.screenRecord",
+  obs: "preExam.appReasons.screenRecord",
+  obs64: "preExam.appReasons.screenRecord",
+  "obs-studio": "preExam.appReasons.screenRecord",
+  peek: "preExam.appReasons.screenRecord",
+  camtasia: "preExam.appReasons.screenRecord",
+  bandicam: "preExam.appReasons.screenRecord",
 };
 
 export interface CheckIn {
@@ -52,41 +54,34 @@ const secondaryButtonClass =
 function problemsOf(report: EnvironmentReport): string[] {
   const problems: string[] = [];
   if (report.monitor_count > 1 && !report.extra_screens_allowed) {
-    problems.push(
-      `${report.monitor_count} screens are connected. A second screen could show answers or a lookup outside the exam - disconnect all but one.`,
-    );
+    problems.push(i18next.t("preExam.problems.extraScreens", { count: report.monitor_count }));
   }
   for (const app of report.forbidden_apps) {
-    const reason = APP_REASONS[app] ?? "could be used to get help during the exam";
-    problems.push(`${app} is running, which ${reason}. Close it before starting.`);
+    const reason = i18next.t(APP_REASON_KEYS[app] ?? "preExam.appReasons.other");
+    problems.push(i18next.t("preExam.problems.forbiddenApp", { app, reason }));
   }
   if (report.other_windows.length > 0 && !report.other_windows_allowed) {
-    problems.push(
-      `Other windows are open: ${report.other_windows.join(", ")}. Anything else open could be used to look something up or message someone during the exam - close them before starting.`,
-    );
+    problems.push(i18next.t("preExam.problems.otherWindows", { windows: report.other_windows.join(", ") }));
   }
-  if (isUpdating()) problems.push("An update is downloading in the background. Wait a moment for it to finish, then try again.");
+  if (isUpdating()) problems.push(i18next.t("preExam.problems.updating"));
   return problems;
 }
 
 function Warning({ onContinue, onCancel }: { onContinue: () => void; onCancel: () => void }) {
+  const { t } = useTranslation();
   return (
-    <div role="alertdialog" aria-label="Before you start" className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
+    <div role="alertdialog" aria-label={t("preExam.beforeYouStart")} className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
       <div className="w-full max-w-sm rounded-lg bg-magi-white shadow-xl p-5 space-y-4">
         <div>
-          <p className="text-sm font-bold text-magi-primary">Before you start</p>
-          <p className="text-sm text-magi-secondary mt-2">
-            Once you start, the window goes full screen and locks: you won't be able to close it, minimize it, or switch
-            to another app. Leaving the window, even briefly, is recorded as a possible cheating attempt along with a
-            screenshot. Don't start until you're ready to stay in the exam the whole time.
-          </p>
+          <p className="text-sm font-bold text-magi-primary">{t("preExam.beforeYouStart")}</p>
+          <p className="text-sm text-magi-secondary mt-2">{t("preExam.warningCopy")}</p>
         </div>
         <div className="flex items-center justify-between gap-3">
           <button type="button" onClick={onCancel} className={`${secondaryButtonClass} flex-1`}>
-            Cancel
+            {t("preExam.cancel")}
           </button>
           <button type="button" onClick={onContinue} className={`${primaryButtonClass} flex-1 justify-center`}>
-            OK
+            {t("preExam.ok")}
           </button>
         </div>
       </div>
@@ -95,6 +90,7 @@ function Warning({ onContinue, onCancel }: { onContinue: () => void; onCancel: (
 }
 
 function Environment({ onPassed, onCancel }: { onPassed: () => void; onCancel: () => void }) {
+  const { t } = useTranslation();
   const [problems, setProblems] = useState<string[] | null>(null);
   const passed = useRef(onPassed);
   passed.current = onPassed;
@@ -122,27 +118,28 @@ function Environment({ onPassed, onCancel }: { onPassed: () => void; onCancel: (
   }, []);
 
   if (problems === null) {
-    return <p className="text-center text-sm text-magi-secondary font-light py-10">Checking your computer…</p>;
+    return <p className="text-center text-sm text-magi-secondary font-light py-10">{t("preExam.checkingComputer")}</p>;
   }
   return (
     <div className="space-y-4">
       <div role="alert" className="p-4 rounded-lg bg-red-50 border border-red-200">
-        <p className="text-sm font-bold text-magi-destructive">The exam can't start yet</p>
+        <p className="text-sm font-bold text-magi-destructive">{t("preExam.cantStartYet")}</p>
         <ul className="mt-1 text-sm text-magi-destructive list-disc pl-5">
           {problems.map((p) => (
             <li key={p}>{p}</li>
           ))}
         </ul>
       </div>
-      <p className="text-xs text-magi-secondary">This checks again by itself every few seconds.</p>
+      <p className="text-xs text-magi-secondary">{t("preExam.rechecksAutomatically")}</p>
       <button type="button" onClick={onCancel} className={secondaryButtonClass}>
-        Cancel
+        {t("preExam.cancel")}
       </button>
     </div>
   );
 }
 
 function Identity({ token, onReady, onCancel }: { token: string; onReady: (checkIn: CheckIn) => void; onCancel: () => void }) {
+  const { t } = useTranslation();
   const notes = useRef<CheckIn["notes"]>([]);
   const camera = useCamera((kind, detail) => {
     if (kind === "camera_failed") notes.current.push({ kind, detail });
@@ -256,8 +253,8 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
     <div className="space-y-4">
       {camera.problem ? (
         <div role="alert" className="p-4 rounded-lg bg-red-50 border border-red-200">
-          <p className="text-sm font-bold text-magi-destructive">The camera isn't available</p>
-          <p className="text-sm text-magi-destructive mt-1">{camera.problem}. The exam can go on without it, and this is recorded.</p>
+          <p className="text-sm font-bold text-magi-destructive">{t("preExam.cameraUnavailable")}</p>
+          <p className="text-sm text-magi-destructive mt-1">{t("preExam.cameraUnavailableDetail", { reason: camera.problem })}</p>
         </div>
       ) : (
         <div className="max-w-sm mx-auto rounded-lg overflow-hidden border border-magi-border bg-black">
@@ -265,44 +262,44 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
         </div>
       )}
       <div className="max-w-sm mx-auto space-y-3 text-center">
-        <h3 className="text-lg font-bold font-outfit text-magi-primary">Who is taking the exam</h3>
-        <p className="text-sm text-magi-secondary">Type your ID number, then hold your ID card next to your face and take the photo.</p>
+        <h3 className="text-lg font-bold font-outfit text-magi-primary">{t("preExam.whoIsTaking")}</h3>
+        <p className="text-sm text-magi-secondary">{t("preExam.typeIdAndPhoto")}</p>
         <div className="text-left">
           <label htmlFor="id-number" className="block text-sm font-medium text-magi-primary mb-1">
-            ID number
+            {t("preExam.idNumber")}
           </label>
           <input id="id-number" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} autoComplete="off" className={inputClass} />
         </div>
-        {notReady && <p className="text-xs text-magi-destructive">The camera picture isn't ready yet, try again in a moment.</p>}
+        {notReady && <p className="text-xs text-magi-destructive">{t("preExam.pictureNotReady")}</p>}
         {idMismatch && (
           <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">
-            <p className="text-sm font-bold text-magi-destructive">That&apos;s not your ID number</p>
-            <p className="text-xs text-magi-destructive mt-1">Type the ID number assigned to your own account.</p>
+            <p className="text-sm font-bold text-magi-destructive">{t("preExam.idMismatchTitle")}</p>
+            <p className="text-xs text-magi-destructive mt-1">{t("preExam.idMismatchDetail")}</p>
           </div>
         )}
         {noFace && (
           <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">
-            <p className="text-sm font-bold text-magi-destructive">No face found in the photo</p>
-            <p className="text-xs text-magi-destructive mt-1">Make sure your face is clearly visible to the camera and try again.</p>
+            <p className="text-sm font-bold text-magi-destructive">{t("preExam.noFaceTitle")}</p>
+            <p className="text-xs text-magi-destructive mt-1">{t("preExam.noFaceDetail")}</p>
           </div>
         )}
         {mismatch && (
           <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">
-            <p className="text-sm font-bold text-magi-destructive">This doesn&apos;t look like you</p>
-            <p className="text-xs text-magi-destructive mt-1">The photo didn&apos;t match your reference photo. Check the lighting and try again.</p>
+            <p className="text-sm font-bold text-magi-destructive">{t("preExam.mismatchTitle")}</p>
+            <p className="text-xs text-magi-destructive mt-1">{t("preExam.mismatchDetail")}</p>
           </div>
         )}
         {!screenChecked && (
           <p role="status" className="text-xs text-magi-secondary">
-            Checking your screen… If your computer asks whether to allow screenshots, allow it.
+            {t("preExam.checkingScreen")}
           </p>
         )}
         <button type="button" disabled={id === "" || !ready || !screenChecked || !idNumberLoaded || verifying} onClick={() => void start()} className={`${primaryButtonClass} mx-auto`}>
-          {camera.problem ? "Start without the photo" : verifying ? "Verifying your identity…" : ready ? "Take the photo and start the exam" : "Starting camera…"}
+          {camera.problem ? t("preExam.startWithoutPhoto") : verifying ? t("preExam.verifying") : ready ? t("preExam.takePhotoAndStart") : t("preExam.startingCamera")}
         </button>
-        <p className="text-xs text-magi-secondary">The exam clock starts when you press the button.</p>
+        <p className="text-xs text-magi-secondary">{t("preExam.clockStarts")}</p>
         <button type="button" onClick={onCancel} className="text-xs text-magi-secondary hover:text-magi-primary transition-colors">
-          Cancel
+          {t("preExam.cancel")}
         </button>
       </div>
     </div>
@@ -323,6 +320,7 @@ export function PreExam({
   onReady: (checkIn: CheckIn) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [acknowledged, setAcknowledged] = useState(false);
   const [checked, setChecked] = useState(false);
   const passed = () => {
@@ -334,7 +332,7 @@ export function PreExam({
     <div className="space-y-4">
       <div className="pb-3 border-b border-magi-border">
         <h3 className="text-lg font-bold font-outfit text-magi-primary">{examName}</h3>
-        <p className="text-xs text-magi-secondary mt-0.5">Before the exam starts</p>
+        <p className="text-xs text-magi-secondary mt-0.5">{t("preExam.beforeExamStarts")}</p>
       </div>
       {!acknowledged ? (
         <Warning onContinue={() => setAcknowledged(true)} onCancel={onCancel} />

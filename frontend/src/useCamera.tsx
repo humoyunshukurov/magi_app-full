@@ -2,6 +2,7 @@
 // photo of what it sees. Used by the check before the exam and by the exam itself.
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cameraStart, cameraStop, onCameraFrame, onCameraLost } from "./ipc";
 
 export type CameraEventKind = "camera_on" | "camera_off" | "camera_failed";
@@ -101,9 +102,10 @@ export function useCamera(onEvent: (kind: CameraEventKind, detail: string) => vo
 
 /** The camera picture itself, mirrored like a mirror; put the refs from `useCamera` on it. */
 export function CameraPicture({ camera, className = "" }: { camera: ReturnType<typeof useCamera>; className?: string }) {
+  const { t } = useTranslation();
   return camera.source === "app" ? (
-    <img ref={camera.image} alt="Your camera" className={`w-full block -scale-x-100 ${className}`} />
+    <img ref={camera.image} alt={t("useCamera.yourCamera")} className={`w-full block -scale-x-100 ${className}`} />
   ) : (
-    <video ref={camera.video} autoPlay muted playsInline aria-label="Your camera" className={`w-full block -scale-x-100 ${className}`} />
+    <video ref={camera.video} autoPlay muted playsInline aria-label={t("useCamera.yourCamera")} className={`w-full block -scale-x-100 ${className}`} />
   );
 }

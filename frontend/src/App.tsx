@@ -1,10 +1,43 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { setUpdating } from "./updateState";
 import { AuthPanel } from "./AuthPanel";
+import { LOCALE_KEY } from "./i18n";
+
+const LANGUAGES = [
+  { code: "en", label: "EN" },
+  { code: "uz", label: "UZ" },
+] as const;
+
+function LanguageSwitcher() {
+  const { i18n } = useTranslation();
+  const setLanguage = (code: "en" | "uz") => {
+    void i18n.changeLanguage(code);
+    localStorage.setItem(LOCALE_KEY, code);
+  };
+  return (
+    <div className="flex items-center gap-0.5 p-0.5 rounded-lg border border-magi-border">
+      {LANGUAGES.map(({ code, label }) => (
+        <button
+          key={code}
+          type="button"
+          onClick={() => setLanguage(code)}
+          aria-pressed={i18n.language === code}
+          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors ${
+            i18n.language === code ? "bg-magi-primary text-white" : "text-magi-secondary hover:text-magi-primary"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function App() {
+  const { t } = useTranslation();
   const [examRunning, setExamRunning] = useState(false);
 
   // ADR-0008: checked once per launch. The download runs in the background rather than blocking
@@ -33,7 +66,8 @@ export function App() {
           branding bar competing with it for space. */}
       <header hidden={examRunning} className="sticky top-0 z-50 bg-magi-white border-b border-magi-border">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <span className="font-outfit font-extrabold text-lg tracking-tight">MAGI Desktop</span>
+          <span className="font-outfit font-extrabold text-lg tracking-tight">{t("app.title")}</span>
+          <LanguageSwitcher />
         </div>
       </header>
 
@@ -44,7 +78,7 @@ export function App() {
       </div>
 
       <footer hidden={examRunning} className="bg-magi-white border-t border-magi-border py-6">
-        <p className="text-center text-xs text-magi-secondary font-light">&copy; {new Date().getFullYear()} MAGI</p>
+        <p className="text-center text-xs text-magi-secondary font-light">{t("app.footer", { year: new Date().getFullYear() })}</p>
       </footer>
     </div>
   );

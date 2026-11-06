@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
@@ -138,6 +139,7 @@ export function AnswerSheet({
   label: string;
   onChange: (value: string, metrics: TypingMetrics) => void;
 }) {
+  const { t } = useTranslation();
   const counters = useRef(metrics);
   const lastInputAt = useRef<number | null>(null);
   const onChangeRef = useRef(onChange);
@@ -251,17 +253,17 @@ export function AnswerSheet({
       {/* The ribbon stays at the top, full width, and sticks there while a long answer scrolls.
           The page floats below it on its own gray "desk", with a real gap above it — not glued
           to the ribbon the way an earlier version had it — the way a real word processor looks. */}
-      <div role="toolbar" aria-label="Formatting" className="sticky top-0 z-10 flex flex-col gap-1.5 px-3 py-2 bg-magi-surface border-b border-magi-border shadow-sm">
+      <div role="toolbar" aria-label={t("answerSheet.formatting")} className="sticky top-0 z-10 flex flex-col gap-1.5 px-3 py-2 bg-magi-surface border-b border-magi-border shadow-sm">
         {/* Text: what the letters themselves look like. */}
         <div className="flex flex-wrap items-center gap-1">
-          <ToolbarSelect label="Paragraph style" value={String(toolbar.headingLevel)} onChange={(v) => setHeadingLevel(Number(v) as HeadingLevel)}>
-            <option value="0">Normal text</option>
-            <option value="1">Heading 1</option>
-            <option value="2">Heading 2</option>
-            <option value="3">Heading 3</option>
+          <ToolbarSelect label={t("answerSheet.paragraphStyle")} value={String(toolbar.headingLevel)} onChange={(v) => setHeadingLevel(Number(v) as HeadingLevel)}>
+            <option value="0">{t("answerSheet.normalText")}</option>
+            <option value="1">{t("answerSheet.heading1")}</option>
+            <option value="2">{t("answerSheet.heading2")}</option>
+            <option value="3">{t("answerSheet.heading3")}</option>
           </ToolbarSelect>
-          <ToolbarSelect label="Font size" value={toolbar.fontSize} onChange={setFontSize}>
-            <option value="">Default size</option>
+          <ToolbarSelect label={t("answerSheet.fontSize")} value={toolbar.fontSize} onChange={setFontSize}>
+            <option value="">{t("answerSheet.defaultSize")}</option>
             {FONT_SIZES.map((size) => (
               <option key={size} value={size}>
                 {size} px
@@ -269,47 +271,47 @@ export function AnswerSheet({
             ))}
           </ToolbarSelect>
           <ToolbarDivider />
-          <ToolbarButton label="Bold" active={toolbar.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
+          <ToolbarButton label={t("answerSheet.bold")} active={toolbar.bold} onClick={() => editor.chain().focus().toggleBold().run()}>
             <span className="font-bold">B</span>
           </ToolbarButton>
-          <ToolbarButton label="Italic" active={toolbar.italic} onClick={() => editor.chain().focus().toggleItalic().run()}>
+          <ToolbarButton label={t("answerSheet.italic")} active={toolbar.italic} onClick={() => editor.chain().focus().toggleItalic().run()}>
             <span className="italic">I</span>
           </ToolbarButton>
-          <ToolbarButton label="Underline" active={toolbar.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}>
+          <ToolbarButton label={t("answerSheet.underline")} active={toolbar.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}>
             <span className="underline">U</span>
           </ToolbarButton>
-          <ToolbarButton label="Strikethrough" active={toolbar.strike} onClick={() => editor.chain().focus().toggleStrike().run()}>
+          <ToolbarButton label={t("answerSheet.strikethrough")} active={toolbar.strike} onClick={() => editor.chain().focus().toggleStrike().run()}>
             <span className="line-through">S</span>
           </ToolbarButton>
         </div>
 
         {/* Paragraph: how lines and blocks are laid out, plus undo/redo. */}
         <div className="flex flex-wrap items-center gap-1">
-          <ToolbarButton label="Bullet list" active={toolbar.bulletList} onClick={() => editor.chain().focus().toggleBulletList().run()}>
+          <ToolbarButton label={t("answerSheet.bulletList")} active={toolbar.bulletList} onClick={() => editor.chain().focus().toggleBulletList().run()}>
             <BulletListIcon />
           </ToolbarButton>
-          <ToolbarButton label="Numbered list" active={toolbar.orderedList} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+          <ToolbarButton label={t("answerSheet.numberedList")} active={toolbar.orderedList} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
             <NumberedListIcon />
           </ToolbarButton>
           <ToolbarDivider />
-          <ToolbarButton label="Align left" active={toolbar.alignLeft} onClick={() => editor.chain().focus().setTextAlign("left").run()}>
+          <ToolbarButton label={t("answerSheet.alignLeft")} active={toolbar.alignLeft} onClick={() => editor.chain().focus().setTextAlign("left").run()}>
             <AlignLeftIcon />
           </ToolbarButton>
-          <ToolbarButton label="Align center" active={toolbar.alignCenter} onClick={() => editor.chain().focus().setTextAlign("center").run()}>
+          <ToolbarButton label={t("answerSheet.alignCenter")} active={toolbar.alignCenter} onClick={() => editor.chain().focus().setTextAlign("center").run()}>
             <AlignCenterIcon />
           </ToolbarButton>
-          <ToolbarButton label="Align right" active={toolbar.alignRight} onClick={() => editor.chain().focus().setTextAlign("right").run()}>
+          <ToolbarButton label={t("answerSheet.alignRight")} active={toolbar.alignRight} onClick={() => editor.chain().focus().setTextAlign("right").run()}>
             <AlignRightIcon />
           </ToolbarButton>
           <ToolbarDivider />
-          <ToolbarButton label="Undo" disabled={!toolbar.canUndo} onClick={() => editor.chain().focus().undo().run()}>
+          <ToolbarButton label={t("answerSheet.undo")} disabled={!toolbar.canUndo} onClick={() => editor.chain().focus().undo().run()}>
             <UndoIcon />
           </ToolbarButton>
-          <ToolbarButton label="Redo" disabled={!toolbar.canRedo} onClick={() => editor.chain().focus().redo().run()}>
+          <ToolbarButton label={t("answerSheet.redo")} disabled={!toolbar.canRedo} onClick={() => editor.chain().focus().redo().run()}>
             <RedoIcon />
           </ToolbarButton>
           <span className="ml-auto pr-1 text-xs text-magi-secondary" aria-live="polite">
-            {toolbar.wordCount} {toolbar.wordCount === 1 ? "word" : "words"}
+            {t("answerSheet.wordCount", { count: toolbar.wordCount })}
           </span>
         </div>
       </div>

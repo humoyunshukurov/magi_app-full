@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import "./i18n";
 
 // api.ts fetches through @tauri-apps/plugin-http so requests reach the backend from Rust, not
 // the webview (see api.ts's import comment) - that plugin calls into a real Tauri runtime

@@ -30,8 +30,10 @@
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
     "framer-motion": "^12.43.0",
+    "i18next": "^26.7.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-i18next": "^17.1.12",
     "zod": "^3.23.8"
   },
   "devDependencies": {

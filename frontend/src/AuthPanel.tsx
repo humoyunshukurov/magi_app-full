@@ -6,6 +6,8 @@
 // dashboard/assignment pages are pre-pivot mock content with no real API behind them.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import i18next from "./i18n";
 import { AnimatedButton } from "./components/AnimatedButton";
 import {
   ApiError,
@@ -100,6 +102,7 @@ function ReloadIcon({ spinning }: { spinning?: boolean }) {
 }
 
 function PasswordInput({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
@@ -114,7 +117,7 @@ function PasswordInput({ id, value, onChange }: { id: string; value: string; onC
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        aria-label={visible ? "Hide password" : "Show password"}
+        aria-label={visible ? t("authPanel.hidePassword") : t("authPanel.showPassword")}
         className="absolute inset-y-0 right-0 flex items-center px-3 text-magi-secondary hover:text-magi-primary"
       >
         <EyeIcon open={visible} />
@@ -124,6 +127,7 @@ function PasswordInput({ id, value, onChange }: { id: string; value: string; onC
 }
 
 function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
@@ -166,21 +170,21 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
   return (
     <div className="glass-card py-8 px-6 sm:px-10 max-w-md mx-auto">
       <h2 className="text-2xl font-extrabold font-outfit tracking-tight text-magi-primary text-center mb-1">
-        {mode === "login" ? "Sign In" : "Create Account"}
+        {mode === "login" ? t("authPanel.signIn") : t("authPanel.createAccount")}
       </h2>
       <p className="text-center text-sm text-magi-secondary font-light mb-6">
         {mode === "login" ? (
           <>
-            Or{" "}
+            {t("authPanel.or")}{" "}
             <button type="button" className="font-semibold text-magi-primary hover:text-magi-hover" onClick={() => switchMode("signup")}>
-              create a student account
+              {t("authPanel.createStudentAccount")}
             </button>
           </>
         ) : (
           <>
-            Already have one?{" "}
+            {t("authPanel.alreadyHaveOne")}{" "}
             <button type="button" className="font-semibold text-magi-primary hover:text-magi-hover" onClick={() => switchMode("login")}>
-              sign in
+              {t("authPanel.signInLink")}
             </button>
           </>
         )}
@@ -192,7 +196,7 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
           onClick={fillTestAccount}
           className="mb-4 w-full text-left p-3 rounded-lg bg-magi-surface border border-dashed border-magi-border hover:border-magi-primary transition-colors"
         >
-          <p className="text-xs font-semibold text-magi-primary">Test account</p>
+          <p className="text-xs font-semibold text-magi-primary">{t("authPanel.testAccount")}</p>
           <p className="text-xs text-magi-secondary font-mono mt-0.5">humoyun@test.com / 123456</p>
         </button>
       )}
@@ -208,7 +212,7 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
         {mode === "signup" && (
           <div>
             <label htmlFor="first-name" className="block text-sm font-medium text-magi-primary">
-              First name
+              {t("authPanel.firstName")}
             </label>
             <input
               id="first-name"
@@ -221,7 +225,7 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
         )}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-magi-primary">
-            Email Address
+            {t("authPanel.emailAddress")}
           </label>
           <input
             id="email"
@@ -234,14 +238,14 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
         </div>
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-magi-primary">
-            Password
+            {t("authPanel.password")}
           </label>
           <div className="mt-1">
             <PasswordInput id="password" value={password} onChange={setPassword} />
           </div>
         </div>
         <AnimatedButton type="submit" disabled={isLoading} className={`w-full ${primaryButtonClass}`}>
-          {isLoading ? "Please wait..." : mode === "login" ? "Sign In" : "Sign Up"}
+          {isLoading ? t("authPanel.pleaseWait") : mode === "login" ? t("authPanel.signIn") : t("authPanel.signUp")}
         </AnimatedButton>
       </form>
     </div>
@@ -255,9 +259,8 @@ function formatCountdown(ms: number): string {
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
-  if (days > 0) return `Starts in ${days}d ${hours}h`;
-  if (hours > 0) return `Starts in ${hours}h ${minutes}m`;
-  return `Starts in ${minutes}m`;
+  const value = days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  return i18next.t("authPanel.startsIn", { value });
 }
 
 // Re-renders every 30s so the countdown stays roughly live without a timer per visible digit.
@@ -281,10 +284,11 @@ function ExamAction({
   startingId: number | null;
   onStart: (examId: number) => void;
 }) {
+  const { t } = useTranslation();
   // One attempt per exam: once it is handed in there is nothing left to start.
-  if (exam.attempt_status === "graded") return <span className={doneChip}>Graded</span>;
+  if (exam.attempt_status === "graded") return <span className={doneChip}>{t("authPanel.graded")}</span>;
   if (exam.attempt_status === "submitted" || exam.attempt_status === "auto_submitted") {
-    return <span className={doneChip}>Submitted</span>;
+    return <span className={doneChip}>{t("authPanel.submitted")}</span>;
   }
   const resuming = exam.attempt_status === "in_progress";
   const busy = startingId === exam.id;
@@ -294,7 +298,7 @@ function ExamAction({
       onClick={() => onStart(exam.id)}
       className="px-2.5 py-1 bg-magi-primary hover:bg-magi-hover text-white text-[10px] font-bold rounded-lg transition-colors disabled:opacity-60"
     >
-      {resuming ? (busy ? "Resuming…" : "Resume") : busy ? "Starting…" : "Start"}
+      {resuming ? (busy ? t("authPanel.resuming") : t("authPanel.resume")) : busy ? t("authPanel.starting") : t("authPanel.start")}
     </AnimatedButton>
   );
 }
@@ -345,8 +349,9 @@ function ExamList({
   startingId: number | null;
   onStart: (examId: number) => void;
 }) {
+  const { t } = useTranslation();
   if (exams.length === 0) {
-    return <p className="text-sm text-magi-secondary font-light">No exams assigned yet.</p>;
+    return <p className="text-sm text-magi-secondary font-light">{t("authPanel.noExams")}</p>;
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -356,7 +361,7 @@ function ExamList({
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-magi-primary">{exam.name}</h3>
               <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-magi-border/60 text-magi-secondary">
-                {exam.kind === "homework" ? "HW" : "Exam"}
+                {exam.kind === "homework" ? t("authPanel.homeworkAbbr") : t("authPanel.examLabel")}
               </span>
             </div>
             <p className="text-magi-secondary text-xs font-light mt-1 uppercase tracking-wide">{exam.status}</p>
@@ -364,7 +369,7 @@ function ExamList({
             {!exam.attempt_status && <StartsIn scheduledStart={exam.scheduled_start} />}
           </div>
           <div className="mt-4 pt-3 border-t border-magi-border flex justify-between items-center text-xs">
-            <span className="text-magi-secondary">{exam.max_marks} marks, pass at {exam.passing_marks}</span>
+            <span className="text-magi-secondary">{t("authPanel.marksPassAt", { max: exam.max_marks, passing: exam.passing_marks })}</span>
             <ExamAction exam={exam} startingId={startingId} onStart={onStart} />
           </div>
         </div>
@@ -374,24 +379,29 @@ function ExamList({
 }
 
 function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "timeout" | "left_window" }) {
+  const { t } = useTranslation();
   // Written answers can't be graded on submit, so a submitted attempt has no score yet.
   if (result.status !== "graded") {
     const message = !result.auto_submitted
-      ? "Your answers were submitted."
+      ? t("authPanel.answersSubmitted")
       : reason === "left_window"
-        ? "You left the exam window, so the attempt was submitted automatically and the exam ended."
-        : "Time ran out, your answers were submitted automatically.";
+        ? t("authPanel.leftWindowSubmitted")
+        : t("authPanel.timeoutSubmitted");
     return (
       <div className="p-4 rounded-lg bg-magi-surface border border-magi-border">
         <p className="text-sm font-semibold text-magi-primary">{message}</p>
-        <p className="text-xs text-magi-secondary mt-1">They will be graded soon.</p>
+        <p className="text-xs text-magi-secondary mt-1">{t("authPanel.gradedSoon")}</p>
       </div>
     );
   }
   return (
     <div className="p-4 rounded-lg bg-magi-success/10 border border-magi-success/20">
       <p className="text-sm font-semibold text-magi-success">
-        Graded: {result.score ?? "?"} / {result.exam.max_marks} - {result.passed ? "passed" : "not passed"}
+        {t("authPanel.gradedResult", {
+          score: result.score ?? "?",
+          max: result.exam.max_marks,
+          status: result.passed ? t("authPanel.passed") : t("authPanel.notPassed"),
+        })}
       </p>
     </div>
   );
@@ -405,6 +415,7 @@ export function AuthPanel({
   /** Tells the app whether an exam is open, so it can keep the rest of the app out of the way. */
   onExamRunning?: (running: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const [session, setSession] = useState<Session | null>(null);
   const [restoringSession, setRestoringSession] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -552,7 +563,7 @@ export function AuthPanel({
   }
 
   if (restoringSession) {
-    return <p className="text-center text-sm text-magi-secondary font-light py-10">Loading…</p>;
+    return <p className="text-center text-sm text-magi-secondary font-light py-10">{t("authPanel.loading")}</p>;
   }
 
   if (!session) {
@@ -573,7 +584,7 @@ export function AuthPanel({
             defeating the whole "you can't get out of this" warning the student was just shown. */}
         {!checking && !attempt && (
           <button onClick={() => void onLogout()} className="text-sm text-magi-secondary hover:text-magi-primary transition-colors">
-            Log out
+            {t("authPanel.logOut")}
           </button>
         )}
       </div>
@@ -587,7 +598,7 @@ export function AuthPanel({
 
       {checking ? (
         <PreExam
-          examName={exams?.find((e) => e.id === checking.examId)?.name ?? "Exam"}
+          examName={exams?.find((e) => e.id === checking.examId)?.name ?? t("authPanel.examFallbackName")}
           withPhotos={!checking.resumes}
           token={session.token}
           onReady={(checkedIn) => void onStartAttempt(checking.examId, checking.resumes, checkedIn)}
@@ -610,13 +621,13 @@ export function AuthPanel({
       ) : (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-magi-primary">Exams</h3>
+            <h3 className="text-sm font-bold text-magi-primary">{t("authPanel.examsHeading")}</h3>
             <button
               type="button"
               onClick={() => void reloadExams()}
               disabled={reloading}
-              title="Reload"
-              aria-label="Reload exams"
+              title={t("authPanel.reload")}
+              aria-label={t("authPanel.reloadExams")}
               className="w-8 h-8 flex items-center justify-center rounded-md border border-magi-border text-magi-secondary hover:text-magi-primary hover:border-magi-primary transition-colors disabled:opacity-50"
             >
               <ReloadIcon spinning={reloading} />

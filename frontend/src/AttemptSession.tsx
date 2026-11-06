@@ -3,6 +3,8 @@
 // reaches zero.
 
 import { useEffect, useReducer, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import i18next from "./i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { AnimatedButton } from "./components/AnimatedButton";
@@ -34,13 +36,14 @@ type Question = AttemptView["questions"][number];
 export const SYNC_IDLE_MS = 10_000;
 
 const TEXT_TYPES = new Set(["short_answer", "essay"]);
-const TYPE_LABEL: Record<Question["question_type"], string> = {
-  multiple_choice: "multiple choice",
-  true_false: "true/false",
-  short_answer: "short answer",
-  essay: "essay",
-  file_upload: "file upload",
+const TYPE_LABEL_KEYS: Record<Question["question_type"], string> = {
+  multiple_choice: "attemptSession.typeLabel.multipleChoice",
+  true_false: "attemptSession.typeLabel.trueFalse",
+  short_answer: "attemptSession.typeLabel.shortAnswer",
+  essay: "attemptSession.typeLabel.essay",
+  file_upload: "attemptSession.typeLabel.fileUpload",
 };
+const typeLabel = (type: Question["question_type"]) => i18next.t(TYPE_LABEL_KEYS[type]);
 
 /** `readFile` gives raw bytes; chunked so a multi-MB file doesn't blow the call stack via spread. */
 function toBase64(bytes: Uint8Array): string {
@@ -139,6 +142,7 @@ export function AttemptSession({
   checkIn?: CheckIn;
   onFinished: (result: AttemptSummary, reason?: "timeout" | "left_window") => void;
 }) {
+  const { t } = useTranslation();
   const questions = [...attempt.questions].sort((a, b) => a.position - b.position);
 
   // Answers live in a ref so timers and event handlers always see the latest, and the screen
@@ -179,7 +183,7 @@ export function AttemptSession({
   // Everything the student does here goes to the Activity log as well.
   const log = (kind: ActivityKind, detail: string, extra: { questionId?: number; data?: Record<string, unknown> } = {}) =>
     logActivity({ userId, token, attemptId: attempt.id, examName: attempt.exam.name }, kind, detail, extra);
-  const labelOf = (q: Question) => `question ${questions.indexOf(q) + 1} (${TYPE_LABEL[q.question_type]})`;
+  const labelOf = (q: Question) => `question ${questions.indexOf(q) + 1} (${typeLabel(q.question_type)})`;
   const whereNow = () => {
     const q = questions.find((x) => x.question_id === currentId.current);
     return q ? labelOf(q) : "the exam";
@@ -205,7 +209,7 @@ export function AttemptSession({
       {
         questionId: q.question_id,
         data: {
-          label: `Question ${position} (${TYPE_LABEL[q.question_type]})`,
+          label: `Question ${position} (${typeLabel(q.question_type)})`,
           position,
           typed: s.metrics.typed,
           edited: s.metrics.edited,
@@ -347,7 +351,7 @@ export function AttemptSession({
     if (!saved && !auto) {
       submitInFlight.current = false;
       setSubmitting(false);
-      setError("Couldn't save your answers. Check your connection and try again.");
+      setError(t("attemptSession.couldNotSave"));
       log("submit_failed", "Submit stopped: the answers couldn't be saved to the server");
       return;
     }
@@ -486,7 +490,7 @@ export function AttemptSession({
   });
 
   if (!ready) {
-    return <p className="text-center text-sm text-magi-secondary font-light py-10">Loading…</p>;
+    return <p className="text-center text-sm text-magi-secondary font-light py-10">{t("attemptSession.loading")}</p>;
   }
 
   const q = questions[index]!;
@@ -520,13 +524,13 @@ export function AttemptSession({
       changed(q.question_id);
       log("question_summary", `Uploaded "${fileName}" for question ${questions.indexOf(q) + 1}`, { questionId: q.question_id });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not upload the file");
+      setError(err instanceof ApiError ? err.message : t("attemptSession.uploadFailed"));
     } finally {
       setUploading(false);
     }
   };
 
-  const syncLabel = syncStatus === "syncing" ? "Saving…" : syncStatus === "failed" ? "Couldn't sync, retrying" : "Saved";
+  const syncLabel = syncStatus === "syncing" ? t("attemptSession.saving") : syncStatus === "failed" ? t("attemptSession.syncFailed") : t("attemptSession.saved");
 
   return (
     <div className="space-y-4">
@@ -549,7 +553,7 @@ export function AttemptSession({
 
       {attempt.permitted_urls.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-magi-secondary">Permitted links:</span>
+          <span className="text-magi-secondary">{t("attemptSession.permittedLinks")}</span>
           {attempt.permitted_urls.map((link) => (
             <button
               key={link.id}
@@ -568,7 +572,7 @@ export function AttemptSession({
           <button
             key={qq.question_id}
             type="button"
-            aria-label={`Question ${i + 1}`}
+            aria-label={t("attemptSession.questionNumber", { number: i + 1 })}
             aria-current={i === index ? "step" : undefined}
             onClick={() => setIndex(i)}
             className={`w-8 h-8 rounded-lg border text-xs font-semibold transition-colors ${
@@ -587,7 +591,7 @@ export function AttemptSession({
       <div className="glass-card p-4 space-y-3">
         <div className="flex items-start justify-between gap-4">
           <p className="text-sm font-medium text-magi-primary">{q.question}</p>
-          <span className="shrink-0 text-xs text-magi-secondary">{q.marks} marks</span>
+          <span className="shrink-0 text-xs text-magi-secondary">{t("attemptSession.marksCount", { count: q.marks })}</span>
         </div>
 
         {TEXT_TYPES.has(q.question_type) ? (
@@ -595,7 +599,7 @@ export function AttemptSession({
             key={q.question_id}
             value={s.answer}
             metrics={s.metrics}
-            label="Your answer"
+            label={t("attemptSession.yourAnswer")}
             onChange={typed}
           />
         ) : q.question_type === "file_upload" ? (
@@ -617,7 +621,7 @@ export function AttemptSession({
                 onClick={() => void pickFile()}
                 className="px-4 py-2 text-xs font-bold rounded-lg border border-magi-border text-magi-primary hover:border-magi-primary transition-all disabled:opacity-60"
               >
-                {uploading ? "Uploading…" : s.answer ? "Replace file" : "Choose file to upload"}
+                {uploading ? t("attemptSession.uploading") : s.answer ? t("attemptSession.replaceFile") : t("attemptSession.chooseFile")}
               </AnimatedButton>
             </div>
           </div>
@@ -653,15 +657,15 @@ export function AttemptSession({
           onClick={() => setIndex(index - 1)}
           className="px-3 py-2 text-sm rounded-lg border border-magi-border text-magi-secondary hover:text-magi-primary hover:bg-magi-surface transition-colors disabled:opacity-30"
         >
-          ← Previous
+          {t("attemptSession.previous")}
         </button>
         {index === questions.length - 1 ? (
           <AnimatedButton disabled={submitting} onClick={() => void submit(false)} className={primaryButtonClass}>
-            {submitting ? "Submitting…" : "Submit attempt"}
+            {submitting ? t("attemptSession.submitting") : t("attemptSession.submitAttempt")}
           </AnimatedButton>
         ) : (
           <button type="button" onClick={() => setIndex(index + 1)} className={primaryButtonClass}>
-            Next →
+            {t("attemptSession.next")}
           </button>
         )}
       </div>
