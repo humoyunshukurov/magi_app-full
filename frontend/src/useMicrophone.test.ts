@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useMicrophone } from "./useMicrophone";
 
 const NOISE_TICK_MS = 500;
-const NOISE_TICKS = 10;
+const NOISE_WINDOW_TICKS = 16;
 const CLIP_COOLDOWN_MS = 30_000;
 
 // driven by the test: every getByteTimeDomainData call fills the buffer from this level, where
-// 0 is silence and 40 is comfortably over VOICE_THRESHOLD (25)
+// 0 is silence and 40 is comfortably over both VOICE_THRESHOLD (25) and NOISE_THRESHOLD (15)
 let level = 0;
 
 class FakeAnalyser {
@@ -122,14 +122,14 @@ describe("useMicrophone", () => {
     expect(result.current.isSpeaking()).toBe(true);
   });
 
-  it("records and uploads a clip after sound holds for the full sustained window", async () => {
+  it("records and uploads a clip once the window fills with sustained sound", async () => {
     const onEvent = vi.fn();
     renderHook(() => useMicrophone(onEvent));
     await advance(0);
 
     level = 40;
-    await advance(NOISE_TICK_MS * (NOISE_TICKS - 1));
-    expect(recorders).toHaveLength(0); // not yet - one tick short of the threshold
+    await advance(NOISE_TICK_MS * (NOISE_WINDOW_TICKS - 1));
+    expect(recorders).toHaveLength(0); // not yet - the window isn't full
 
     await advance(NOISE_TICK_MS);
     expect(recorders).toHaveLength(1);
@@ -144,12 +144,25 @@ describe("useMicrophone", () => {
     );
   });
 
-  it("never records while the noise is only intermittent", async () => {
+  it("still records through brief gaps - natural pauses in speech shouldn't reset it to zero", async () => {
     renderHook(() => useMicrophone(vi.fn()));
     await advance(0);
 
-    for (let i = 0; i < NOISE_TICKS * 2; i++) {
-      level = i % 2 === 0 ? 40 : 0; // alternates, so the streak keeps resetting
+    // 3 loud ticks, 1 quiet, repeating - 75% loud, comfortably over the 60% ratio
+    for (let i = 0; i < NOISE_WINDOW_TICKS; i++) {
+      level = i % 4 === 3 ? 0 : 40;
+      await advance(NOISE_TICK_MS);
+    }
+
+    expect(recorders).toHaveLength(1);
+  });
+
+  it("never records when the noise is only about half the time - below the required ratio", async () => {
+    renderHook(() => useMicrophone(vi.fn()));
+    await advance(0);
+
+    for (let i = 0; i < NOISE_WINDOW_TICKS * 3; i++) {
+      level = i % 2 === 0 ? 40 : 0; // alternates 50/50, under the 60% ratio
       await advance(NOISE_TICK_MS);
     }
 
@@ -161,7 +174,7 @@ describe("useMicrophone", () => {
     await advance(0);
 
     level = 40;
-    await advance(NOISE_TICK_MS * NOISE_TICKS); // the first clip starts here - this is lastClipAt
+    await advance(NOISE_TICK_MS * NOISE_WINDOW_TICKS); // the first clip starts here - this is lastClipAt
     expect(recorders).toHaveLength(1);
 
     await advance(CLIP_COOLDOWN_MS - NOISE_TICK_MS); // one tick short of the cooldown elapsing

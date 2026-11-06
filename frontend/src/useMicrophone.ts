@@ -9,21 +9,29 @@ export type MicEventKind = "mic_on" | "mic_off" | "mic_failed" | "background_noi
 
 /** How loud the waveform's deviation from silence needs to be (0-128 scale) to count as someone
  * speaking rather than room/fan noise - a rough, uncalibrated cutoff, which is why the judge in
- * cameraWatch.ts also requires several ticks of this in a row before it means anything, and the
- * noise watch below requires many more. */
+ * cameraWatch.ts also requires several ticks of this in a row before it means anything. */
 const VOICE_THRESHOLD = 25;
+/** Same idea for the noise watch below, but lower: "constant sound from outside the exam" (through
+ * a door, from another room) reaches the mic fainter than someone talking straight into it, which
+ * is what VOICE_THRESHOLD is actually tuned for. */
+const NOISE_THRESHOLD = 15;
 
 // Sampled on its own timer rather than piggybacking on cameraWatch's tick, so this keeps running
 // even with the camera off or between its looks.
 const NOISE_TICK_MS = 500;
-/** Ticks of sound in a row (at NOISE_TICK_MS) before it counts as "constant" rather than a
- * cough, a door, or a word or two - about 5 seconds. */
-const NOISE_TICKS = 10;
+/** How much recent history the noise watch looks back over, in ticks - 8 seconds. */
+const NOISE_WINDOW_TICKS = 16;
+/** Share of that window that has to be over NOISE_THRESHOLD before it counts as "constant" rather
+ * than a cough, a door, or a word or two. Deliberately not "every single tick": real speech and
+ * ambient noise both have brief gaps (breaths, pauses between words) that a strict run-of-ticks
+ * check would reset on every time, making it effectively never fire for anything but an unbroken
+ * tone - 60% tolerates that natural on/off pattern while still ignoring one-off blips. */
+const NOISE_REQUIRED_RATIO = 0.6;
 /** How long a clip to record once that holds, in ms. Not a rolling buffer: recording only starts
  * once the threshold is crossed, so the lead-in before that moment isn't in the clip. */
 const CLIP_MS = 5_000;
 /** Minimum gap between clips while the noise just keeps going, so one noisy stretch sends one
- * clip rather than one every time the ticks roll over. */
+ * clip rather than one every time the window stays over the ratio. */
 const CLIP_COOLDOWN_MS = 30_000;
 
 const rms = (data: Uint8Array): number => {
@@ -70,7 +78,7 @@ export function useMicrophone(onEvent: (kind: MicEventKind, detail: string, data
     let context: AudioContext | null = null;
     let acquired = false;
     let noiseTimer: ReturnType<typeof setInterval> | undefined;
-    let noisyTicks = 0;
+    const noiseHistory: boolean[] = [];
     let recording = false;
     let lastClipAt = 0;
 
@@ -129,14 +137,14 @@ export function useMicrophone(onEvent: (kind: MicEventKind, detail: string, data
       report.current("mic_on", "Microphone on");
 
       noiseTimer = setInterval(() => {
-        if (level() > VOICE_THRESHOLD) {
-          noisyTicks += 1;
-          if (noisyTicks >= NOISE_TICKS && Date.now() - lastClipAt >= CLIP_COOLDOWN_MS) {
-            lastClipAt = Date.now();
-            recordClip();
-          }
-        } else {
-          noisyTicks = 0;
+        noiseHistory.push(level() > NOISE_THRESHOLD);
+        if (noiseHistory.length > NOISE_WINDOW_TICKS) noiseHistory.shift();
+
+        if (noiseHistory.length < NOISE_WINDOW_TICKS) return; // not enough history yet to judge
+        const loudRatio = noiseHistory.filter(Boolean).length / noiseHistory.length;
+        if (loudRatio >= NOISE_REQUIRED_RATIO && Date.now() - lastClipAt >= CLIP_COOLDOWN_MS) {
+          lastClipAt = Date.now();
+          recordClip();
         }
       }, NOISE_TICK_MS);
     })();
