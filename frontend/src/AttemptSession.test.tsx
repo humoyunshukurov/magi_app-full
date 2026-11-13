@@ -45,7 +45,7 @@ const question = (over: Partial<AttemptView["questions"][number]>): AttemptView[
 
 const attempt = (remaining_seconds = 600): AttemptView => ({
   id: 77, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
-  session_duration: 600, session_duration_unit: "seconds", expires_at: "2026-01-01T00:10:00Z", remaining_seconds, exam,
+  session_duration: 600, session_duration_unit: "seconds", expires_at: "2026-01-01T00:10:00Z", remaining_seconds, unlimited_time: false, exam,
   questions: [
     question({ question_id: 1, position: 1, title: "Essay", question: "Explain.", question_type: "essay" }),
     question({ question_id: 2, position: 2, title: "Choice", question: "Pick one.", question_type: "multiple_choice", options: [{ id: 5, option_text: "A" }, { id: 6, option_text: "B" }] }),
@@ -322,6 +322,17 @@ describe("AttemptSession", () => {
     expect(screen.getByRole("timer").textContent).toBe("02:05");
     await advance(5000);
     expect(screen.getByRole("timer").textContent).toBe("02:00");
+  });
+
+  it("shows 'no time limit' instead of a countdown on a retake, and never auto-submits it", async () => {
+    renderSession({ ...attempt(125), unlimited_time: true });
+    await flush();
+
+    expect(screen.queryByRole("timer")).toBeNull();
+    expect(screen.getByText("No time limit")).toBeTruthy();
+
+    await advance(5000);
+    expect(submitAttempt).not.toHaveBeenCalled();
   });
 
   describe("activity log", () => {

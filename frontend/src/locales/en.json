@@ -48,6 +48,7 @@
     "saving": "Saving…",
     "syncFailed": "Couldn't sync, retrying",
     "saved": "Saved",
+    "noTimeLimit": "No time limit",
     "permittedLinks": "Permitted links:",
     "questionNumber": "Question {{number}}",
     "marksCount_one": "{{count}} mark",

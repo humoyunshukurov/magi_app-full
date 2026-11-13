@@ -48,6 +48,7 @@
     "saving": "Saqlanmoqda…",
     "syncFailed": "Sinxronlanmadi, qayta urinilmoqda",
     "saved": "Saqlandi",
+    "noTimeLimit": "Vaqt chegarasi yo'q",
     "permittedLinks": "Ruxsat etilgan havolalar:",
     "questionNumber": "{{number}}-savol",
     "marksCount_one": "{{count}} ball",

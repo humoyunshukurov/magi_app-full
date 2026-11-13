@@ -417,7 +417,9 @@ export function AttemptSession({
         setReady(true);
         log(
           resumed ? "attempt_resumed" : "attempt_started",
-          `${resumed ? "Resumed" : "Started"} "${attempt.exam.name}": ${questions.length} questions, ${Math.round(attempt.remaining_seconds / 60)} min ${resumed ? "left" : ""}`.trim(),
+          `${resumed ? "Resumed" : "Started"} "${attempt.exam.name}": ${questions.length} questions, ${
+            attempt.unlimited_time ? "no time limit" : `${Math.round(attempt.remaining_seconds / 60)} min ${resumed ? "left" : ""}`
+          }`.trim(),
           { data: { question_count: questions.length, order: questions.map((q) => q.title) } },
         );
         if (checkIn?.idNumber) {
@@ -444,9 +446,12 @@ export function AttemptSession({
 
   useEffect(() => {
     const id = setInterval(() => {
+      sampleTimeline();
+      // a professor-granted retake (unlimited_time) never has a clock to run out - no point
+      // computing a countdown that would just overflow formatClock's mm:ss into giant numbers
+      if (attempt.unlimited_time) return;
       const left = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000));
       setRemaining(left);
-      sampleTimeline();
       if (left === 0) void submit(true);
     }, 1000);
     return () => clearInterval(id);
@@ -540,14 +545,20 @@ export function AttemptSession({
         <h3 className="text-lg font-bold font-outfit text-magi-primary">{attempt.exam.name}</h3>
         <div className="flex items-center gap-3">
           <span className={`text-xs ${syncStatus === "failed" ? "text-magi-destructive" : "text-magi-secondary"}`}>{syncLabel}</span>
-          <span
-            role="timer"
-            className={`px-2.5 py-1 rounded-lg bg-magi-surface border border-magi-border text-xs font-semibold tabular-nums ${
-              remaining <= 60 ? "text-magi-destructive" : "text-magi-primary"
-            }`}
-          >
-            {formatClock(remaining)}
-          </span>
+          {attempt.unlimited_time ? (
+            <span className="px-2.5 py-1 rounded-lg bg-magi-surface border border-magi-border text-xs font-semibold text-magi-primary">
+              {t("attemptSession.noTimeLimit")}
+            </span>
+          ) : (
+            <span
+              role="timer"
+              className={`px-2.5 py-1 rounded-lg bg-magi-surface border border-magi-border text-xs font-semibold tabular-nums ${
+                remaining <= 60 ? "text-magi-destructive" : "text-magi-primary"
+              }`}
+            >
+              {formatClock(remaining)}
+            </span>
+          )}
         </div>
       </div>
 

@@ -170,6 +170,7 @@ const attemptSummarySchema = z.object({
   session_duration_unit: timeUnitSchema,
   expires_at: z.string(),
   remaining_seconds: z.number(),
+  unlimited_time: z.boolean(),
   exam: attemptExamBriefSchema,
   score: z.number().optional(),
   passed: z.boolean().optional(),
