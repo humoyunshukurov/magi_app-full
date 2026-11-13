@@ -50,7 +50,15 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const exam = { id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
+// ongoing and inside its window relative to whenever the test actually runs, since the app only
+// ever shows an exam it's actionable right now - see isActionable in AuthPanel.tsx
+const NOW = Date.now();
+const exam = {
+  id: 15, name: "Test Exam", kind: "exam",
+  scheduled_start: new Date(NOW - 60_000).toISOString(),
+  scheduled_end: new Date(NOW + 60 * 60_000).toISOString(),
+  status: "ongoing", max_marks: 10, passing_marks: 5,
+};
 const loginResponse = {
   status: 200,
   body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } },
@@ -92,7 +100,7 @@ describe("AuthPanel", () => {
       // GET /api/exams
       {
         status: 200,
-        body: { success: true, exams: [{ id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 }] },
+        body: { success: true, exams: [exam] },
       },
       // POST /api/attempts
       {
@@ -101,8 +109,8 @@ describe("AuthPanel", () => {
           success: true,
           attempt: {
             id: 28, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
-            session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:01:00Z", remaining_seconds: 60,
-            exam: { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 },
+            session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:01:00Z", remaining_seconds: 60, late_seconds: 0, unlimited_time: false,
+            exam,
             questions: [{
               question_id: 26, position: 1, title: "Q1", question: "Is this a test?", question_type: "multiple_choice",
               expected_duration: 60, expected_duration_unit: "seconds", marks: 10,
@@ -115,7 +123,7 @@ describe("AuthPanel", () => {
         },
       },
       // PUT /api/attempts/28/answers (flushed when the attempt is submitted)
-      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55 } },
+      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55, late_seconds: 0 } },
       // POST /api/attempts/28/submit
       {
         status: 200,
@@ -123,8 +131,8 @@ describe("AuthPanel", () => {
           success: true,
           attempt: {
             id: 28, exam_id: 15, status: "graded", started_at: null, submitted_at: "2026-01-01T00:00:10Z", auto_submitted: false,
-            session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:01:00Z", remaining_seconds: 0,
-            exam: { id: 15, name: "Test Exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 },
+            session_duration: 60, session_duration_unit: "seconds", expires_at: "2026-01-01T00:01:00Z", remaining_seconds: 0, late_seconds: 0, unlimited_time: false,
+            exam,
             score: 10, passed: true,
           },
           message: "Your answers have been submitted",
@@ -181,7 +189,7 @@ describe("AuthPanel", () => {
   it("says a submitted attempt is waiting to be graded instead of showing a made-up score", async () => {
     const attempt = {
       id: 28, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
-      session_duration: 60, session_duration_unit: "seconds", expires_at: "2099-01-01T00:01:00Z", remaining_seconds: 60, exam,
+      session_duration: 60, session_duration_unit: "seconds", expires_at: "2099-01-01T00:01:00Z", remaining_seconds: 60, late_seconds: 0, unlimited_time: false, exam,
       questions: [{
         question_id: 26, position: 1, title: "Q1", question: "Is this a test?", question_type: "multiple_choice",
         expected_duration: 60, expected_duration_unit: "seconds", marks: 10,
@@ -195,7 +203,7 @@ describe("AuthPanel", () => {
       loginResponse,
       examsResponse,
       { status: 200, body: { success: true, attempt } },
-      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55 } },
+      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55, late_seconds: 0 } },
       {
         status: 200,
         body: { success: true, attempt: { ...attempt, status: "submitted", submitted_at: "2026-01-01T00:00:10Z", remaining_seconds: 0 }, message: "Your answers have been submitted" },
@@ -241,20 +249,18 @@ describe("AuthPanel", () => {
       await screen.findByText("stop here");
     });
 
-    it.each([
-      ["submitted", "Submitted"],
-      ["auto_submitted", "Submitted"],
-      ["graded", "Graded"],
-    ])("shows %s as a label, with nothing to click", async (status, label) => {
-      queueFetch([loginResponse, listWith(status)]);
-      render(<AuthPanel />);
-      signIn();
-      await screen.findByText(/Test Exam/);
-      expect(screen.getByText(label)).toBeTruthy();
-      expect(screen.queryByRole("button", { name: /Start|Resume/ })).toBeNull();
-    });
+    it.each(["submitted", "auto_submitted", "graded"])(
+      "hides an exam that is already %s - nothing left to do with it in the app",
+      async (status) => {
+        queueFetch([loginResponse, listWith(status)]);
+        render(<AuthPanel />);
+        signIn();
+        await screen.findByText("No exams assigned yet.");
+        expect(screen.queryByText(/Test Exam/)).toBeNull();
+      },
+    );
 
-    it("refreshes the list when starting fails, so a stale Start turns into the real state", async () => {
+    it("refreshes the list when starting fails, so a stale Start disappears once the exam is really done", async () => {
       queueFetch([
         loginResponse,
         listWith(null),
@@ -267,8 +273,8 @@ describe("AuthPanel", () => {
       await begin();
 
       await screen.findByText("You have already completed this exam");
-      await screen.findByText("Submitted");
-      expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+      await screen.findByText("No exams assigned yet.");
+      expect(screen.queryByText(/Test Exam/)).toBeNull();
     });
 
     it("fetches the list again when Reload is pressed, so a newly assigned exam shows up", async () => {
@@ -358,7 +364,7 @@ describe("AuthPanel", () => {
             success: true,
             attempt: {
               id: 28, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
-              session_duration: 60, session_duration_unit: "seconds", expires_at: "2099-01-01T00:01:00Z", remaining_seconds: 60, exam,
+              session_duration: 60, session_duration_unit: "seconds", expires_at: "2099-01-01T00:01:00Z", remaining_seconds: 60, late_seconds: 0, unlimited_time: false, exam,
               questions: [{
                 question_id: 26, position: 1, title: "Q1", question: "Is this a test?", question_type: "multiple_choice",
                 expected_duration: 60, expected_duration_unit: "seconds", marks: 10,
@@ -425,10 +431,12 @@ describe("AuthPanel", () => {
     });
 
     it("does nothing for an exam that's already graded", async () => {
+      // a graded exam is hidden from the app's own list entirely, but the deep link still names
+      // its id directly - it must still do nothing once that exam turns up already done
       queueFetch([loginResponse, { status: 200, body: { success: true, exams: [{ ...exam, attempt_status: "graded" }] } }]);
       render(<AuthPanel />);
       signIn();
-      await screen.findByText(/Test Exam/);
+      await screen.findByText("No exams assigned yet.");
 
       act(() => emitLaunch({ token: null, exam_id: exam.id }));
       await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2));

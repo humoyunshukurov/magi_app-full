@@ -45,7 +45,8 @@ const question = (over: Partial<AttemptView["questions"][number]>): AttemptView[
 
 const attempt = (remaining_seconds = 600): AttemptView => ({
   id: 77, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
-  session_duration: 600, session_duration_unit: "seconds", expires_at: "2026-01-01T00:10:00Z", remaining_seconds, unlimited_time: false, exam,
+  session_duration: 600, session_duration_unit: "seconds", expires_at: "2026-01-01T00:10:00Z", remaining_seconds,
+  late_seconds: 0, unlimited_time: false, exam,
   questions: [
     question({ question_id: 1, position: 1, title: "Essay", question: "Explain.", question_type: "essay" }),
     question({ question_id: 2, position: 2, title: "Choice", question: "Pick one.", question_type: "multiple_choice", options: [{ id: 5, option_text: "A" }, { id: 6, option_text: "B" }] }),
@@ -131,7 +132,7 @@ beforeEach(() => {
   vi.mocked(draftSave).mockResolvedValue(undefined);
   vi.mocked(draftClear).mockResolvedValue(undefined);
   vi.mocked(activityLog).mockResolvedValue(undefined);
-  vi.mocked(syncAnswers).mockResolvedValue({ synced: 1, remaining_seconds: 600 });
+  vi.mocked(syncAnswers).mockResolvedValue({ synced: 1, remaining_seconds: 600, late_seconds: 0 });
   vi.mocked(submitAttempt).mockResolvedValue({ attempt: finished, message: "ok" });
 });
 
@@ -228,19 +229,18 @@ describe("AttemptSession", () => {
     expect(screen.getByText("Pick one.")).toBeTruthy();
   });
 
-  it("saves what was typed and submits by itself when the time runs out", async () => {
+  it("keeps the attempt open and the typed answer intact once the deadline passes, instead of submitting by itself", async () => {
     const onFinished = renderSession(attempt(5));
     await flush();
     type(screen.getByLabelText("Your answer"), "late answer");
 
-    await advance(5000);
+    await advance(6000);
     await flush();
 
-    expect(syncAnswers).toHaveBeenCalledWith("tok", 77, [expect.objectContaining({ answer: "<p>late answer</p>" })]);
-    expect(submitAttempt).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(syncAnswers).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(submitAttempt).mock.invocationCallOrder[0]!);
-    expect(onFinished).toHaveBeenCalledWith(finished, "timeout");
-    expect(draftClear).toHaveBeenCalledWith(77);
+    expect(submitAttempt).not.toHaveBeenCalled();
+    expect(onFinished).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Your answer").textContent).toBe("late answer");
+    expect(screen.getByRole("timer").textContent).toMatch(/Running late/);
   });
 
   it("flushes, submits and clears the local drafts on Submit", async () => {
@@ -603,14 +603,14 @@ describe("AttemptSession", () => {
       expect(logged("auto_submitted")).toHaveLength(0);
     });
 
-    it("records a timeout as an automatic submit", async () => {
+    it("logs nothing when the deadline just passes - only leaving the window or an actual submit end the attempt", async () => {
       renderSession(attempt(5));
       await flush();
 
-      await advance(5000);
+      await advance(6000);
       await flush();
 
-      expect(logged("auto_submitted")).toHaveLength(1);
+      expect(logged("auto_submitted")).toHaveLength(0);
       expect(logged("attempt_submitted")).toHaveLength(0);
     });
 

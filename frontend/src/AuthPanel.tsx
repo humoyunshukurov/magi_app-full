@@ -7,7 +7,6 @@
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import i18next from "./i18n";
 import { AnimatedButton } from "./components/AnimatedButton";
 import {
   ApiError,
@@ -252,29 +251,6 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
   );
 }
 
-const doneChip = "px-2.5 py-1 rounded-lg border border-magi-border bg-magi-white text-[10px] font-bold text-magi-secondary";
-
-function formatCountdown(ms: number): string {
-  const totalMinutes = Math.max(1, Math.ceil(ms / 60000));
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  const value = days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-  return i18next.t("authPanel.startsIn", { value });
-}
-
-// Re-renders every 30s so the countdown stays roughly live without a timer per visible digit.
-function StartsIn({ scheduledStart }: { scheduledStart: string }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
-  const diff = new Date(scheduledStart).getTime() - now;
-  if (diff <= 0) return null;
-  return <p className="text-magi-secondary text-[11px] font-mono mt-0.5">{formatCountdown(diff)}</p>;
-}
-
 function ExamAction({
   exam,
   startingId,
@@ -285,11 +261,7 @@ function ExamAction({
   onStart: (examId: number) => void;
 }) {
   const { t } = useTranslation();
-  // One attempt per exam: once it is handed in there is nothing left to start.
-  if (exam.attempt_status === "graded") return <span className={doneChip}>{t("authPanel.graded")}</span>;
-  if (exam.attempt_status === "submitted" || exam.attempt_status === "auto_submitted") {
-    return <span className={doneChip}>{t("authPanel.submitted")}</span>;
-  }
+  // ExamList only ever renders an actionable exam (see isActionable) - a done one never reaches here.
   const resuming = exam.attempt_status === "in_progress";
   const busy = startingId === exam.id;
   return (
@@ -303,10 +275,19 @@ function ExamAction({
   );
 }
 
-// Exams a student can act on right now (ongoing, or a demo open at any time) belong at the top
-// of the list, newest-created first; everything else follows, also newest-created first - id
-// order is a more reliable "newest" signal than scheduled_start, which a professor can set to
-// anything regardless of when the exam was actually created.
+// The app only ever shows what a student can act on right now - anything else (upcoming,
+// submitted, graded) is history/schedule, which belongs on the web, not here. An attempt already
+// in progress is always actionable: nothing closes it on its own anymore, deadline or not.
+function isActionable(exam: ExamSummary): boolean {
+  if (exam.attempt_status === "in_progress") return true;
+  if (exam.attempt_status) return false; // submitted/auto_submitted/graded - nothing left to do
+  if (exam.status !== "ongoing" && exam.status !== "demo") return false;
+  const now = Date.now();
+  return now >= new Date(exam.scheduled_start).getTime() && now < new Date(exam.scheduled_end).getTime();
+}
+
+// Newest-created first - id order is a more reliable "newest" signal than scheduled_start, which
+// a professor can set to anything regardless of when the exam was actually created.
 const STATUS_RANK: Record<ExamSummary["status"], number> = {
   ongoing: 0,
   demo: 0,
@@ -316,16 +297,8 @@ const STATUS_RANK: Record<ExamSummary["status"], number> = {
   cancelled: 3,
 };
 
-// Exams still waiting on the student (nothing started, or an in-progress attempt) are what they
-// actually need to find fast - already handed-in ones sink below so they don't get in the way.
-function isDone(exam: ExamSummary): boolean {
-  return exam.attempt_status === "submitted" || exam.attempt_status === "auto_submitted" || exam.attempt_status === "graded";
-}
-
 function sortExams(exams: ExamSummary[]): ExamSummary[] {
   return [...exams].sort((a, b) => {
-    const doneRank = Number(isDone(a)) - Number(isDone(b));
-    if (doneRank !== 0) return doneRank;
     const rank = STATUS_RANK[a.status] - STATUS_RANK[b.status];
     return rank !== 0 ? rank : b.id - a.id;
   });
@@ -350,12 +323,13 @@ function ExamList({
   onStart: (examId: number) => void;
 }) {
   const { t } = useTranslation();
-  if (exams.length === 0) {
+  const actionable = exams.filter(isActionable);
+  if (actionable.length === 0) {
     return <p className="text-sm text-magi-secondary font-light">{t("authPanel.noExams")}</p>;
   }
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {sortExams(exams).map((exam) => (
+      {sortExams(actionable).map((exam) => (
         <div key={exam.id} className="p-4 rounded-lg bg-magi-surface border border-magi-border flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -366,7 +340,6 @@ function ExamList({
             </div>
             <p className="text-magi-secondary text-xs font-light mt-1 uppercase tracking-wide">{exam.status}</p>
             <p className="text-magi-secondary text-[11px] font-mono mt-0.5">{formatSchedule(exam.scheduled_start, exam.scheduled_end)}</p>
-            {!exam.attempt_status && <StartsIn scheduledStart={exam.scheduled_start} />}
           </div>
           <div className="mt-4 pt-3 border-t border-magi-border flex justify-between items-center text-xs">
             <span className="text-magi-secondary">{t("authPanel.marksPassAt", { max: exam.max_marks, passing: exam.passing_marks })}</span>
@@ -378,18 +351,27 @@ function ExamList({
   );
 }
 
-function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "timeout" | "left_window" }) {
+// A simple "1h 20m"/"5m" duration, same light-touch style the old countdown used - not every
+// unit needs full localization to be readable.
+function formatLate(seconds: number): string {
+  const totalMinutes = Math.max(1, Math.round(seconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "left_window" }) {
   const { t } = useTranslation();
-  // Written answers can't be graded on submit, so a submitted attempt has no score yet.
+  const lateNote = result.late_seconds > 0 ? t("authPanel.lateBy", { time: formatLate(result.late_seconds) }) : null;
+  // Written answers can't be graded on submit, so a submitted attempt has no score yet. Nothing
+  // closes an attempt by itself anymore but leaving the exam window - auto_submitted itself is
+  // always false on a fresh submission now, so reason (set client-side) is the real signal here.
   if (result.status !== "graded") {
-    const message = !result.auto_submitted
-      ? t("authPanel.answersSubmitted")
-      : reason === "left_window"
-        ? t("authPanel.leftWindowSubmitted")
-        : t("authPanel.timeoutSubmitted");
+    const message = reason === "left_window" ? t("authPanel.leftWindowSubmitted") : t("authPanel.answersSubmitted");
     return (
       <div className="p-4 rounded-lg bg-magi-surface border border-magi-border">
         <p className="text-sm font-semibold text-magi-primary">{message}</p>
+        {lateNote && <p className="text-xs text-magi-destructive font-medium mt-1">{lateNote}</p>}
         <p className="text-xs text-magi-secondary mt-1">{t("authPanel.gradedSoon")}</p>
       </div>
     );
@@ -403,6 +385,7 @@ function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "t
           status: result.passed ? t("authPanel.passed") : t("authPanel.notPassed"),
         })}
       </p>
+      {lateNote && <p className="text-xs text-magi-destructive font-medium mt-1">{lateNote}</p>}
     </div>
   );
 }
@@ -422,7 +405,7 @@ export function AuthPanel({
   const [exams, setExams] = useState<ExamSummary[] | null>(null);
   const [attempt, setAttempt] = useState<AttemptView | null>(null);
   const [result, setResult] = useState<AttemptSummary | null>(null);
-  const [resultReason, setResultReason] = useState<"timeout" | "left_window" | undefined>(undefined);
+  const [resultReason, setResultReason] = useState<"left_window" | undefined>(undefined);
   const [startingId, setStartingId] = useState<number | null>(null);
   const [resumed, setResumed] = useState(false);
   const [checking, setChecking] = useState<{ examId: number; resumes: boolean } | null>(null);

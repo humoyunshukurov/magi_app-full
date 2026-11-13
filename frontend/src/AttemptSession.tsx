@@ -140,7 +140,7 @@ export function AttemptSession({
   resumed?: boolean;
   /** Photos and notes from the check before the exam, written to the log once the exam is open. */
   checkIn?: CheckIn;
-  onFinished: (result: AttemptSummary, reason?: "timeout" | "left_window") => void;
+  onFinished: (result: AttemptSummary, reason?: "left_window") => void;
 }) {
   const { t } = useTranslation();
   const questions = [...attempt.questions].sort((a, b) => a.position - b.position);
@@ -151,13 +151,16 @@ export function AttemptSession({
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [ready, setReady] = useState(false);
   const [index, setIndex] = useState(0);
-  const [remaining, setRemaining] = useState(attempt.remaining_seconds);
+  // signed: remaining_seconds and late_seconds are never both nonzero, so this is exactly how far
+  // from the deadline the attempt is right now - negative once it's running late
+  const initialRemaining = attempt.remaining_seconds - attempt.late_seconds;
+  const [remaining, setRemaining] = useState(initialRemaining);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "failed">("idle");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const deadline = useRef(Date.now() + attempt.remaining_seconds * 1000);
+  const deadline = useRef(Date.now() + initialRemaining * 1000);
   const shownAt = useRef(Date.now());
   const currentId = useRef<number | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -299,7 +302,7 @@ export function AttemptSession({
           const s = store.current[id];
           if (s && s.syncedRev < rev) s.syncedRev = rev;
         }
-        deadline.current = Date.now() + res.remaining_seconds * 1000;
+        deadline.current = Date.now() + (res.remaining_seconds - res.late_seconds) * 1000;
         setSyncStatus("idle");
         if (syncFailing.current) {
           syncFailing.current = false;
@@ -329,14 +332,16 @@ export function AttemptSession({
     rerender();
   };
 
-  const finish = (result: AttemptSummary, reason?: "timeout" | "left_window") => {
+  const finish = (result: AttemptSummary, reason?: "left_window") => {
     finished.current = true;
     clearTimeout(syncTimer.current);
     draftClear(attempt.id).catch(() => undefined);
     onFinished(result, reason);
   };
 
-  const submit = async (auto: boolean, reason: "timeout" | "left_window" = "timeout") => {
+  // auto is only ever true for leaving the exam window now - nothing closes an attempt on its
+  // own just because its deadline passed, so "timeout" isn't a reason this can happen anymore
+  const submit = async (auto: boolean) => {
     if (finished.current || submitInFlight.current) return;
     submitInFlight.current = true;
     setSubmitting(true);
@@ -365,18 +370,12 @@ export function AttemptSession({
     };
     const logSubmitted = () =>
       auto
-        ? log(
-            "auto_submitted",
-            reason === "left_window"
-              ? "Left the exam window - the attempt was submitted automatically and the exam ended"
-              : "Time ran out, the answers were submitted automatically",
-            { data: completion },
-          )
+        ? log("auto_submitted", "Left the exam window - the attempt was submitted automatically and the exam ended", { data: completion })
         : log("attempt_submitted", "The student submitted the attempt", { data: completion });
     try {
       const result = (await submitAttempt(token, attempt.id, timeline.current)).attempt;
       logSubmitted();
-      finish(result, auto ? reason : undefined);
+      finish(result, auto ? "left_window" : undefined);
     } catch (err) {
       // The submit may have actually gone through server-side even though this response was
       // lost (network blip, timeout, the app losing focus mid-request) - check the real state
@@ -388,7 +387,7 @@ export function AttemptSession({
         const result = await getAttempt(token, attempt.id);
         if (DONE_STATUSES.has(result.status)) {
           logSubmitted();
-          finish(result, auto ? reason : undefined);
+          finish(result, auto ? "left_window" : undefined);
           return;
         }
       } catch {
@@ -450,9 +449,9 @@ export function AttemptSession({
       // a professor-granted retake (unlimited_time) never has a clock to run out - no point
       // computing a countdown that would just overflow formatClock's mm:ss into giant numbers
       if (attempt.unlimited_time) return;
-      const left = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000));
-      setRemaining(left);
-      if (left === 0) void submit(true);
+      // never clamped to 0 here: once it goes negative the attempt is just running late, not
+      // closed - nothing submits it but the student's own click, however long that takes
+      setRemaining(Math.ceil((deadline.current - Date.now()) / 1000));
     }, 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -490,8 +489,8 @@ export function AttemptSession({
     where: whereNow,
     questionId: () => currentId.current ?? undefined,
     permittedUrls: attempt.permitted_urls.map((u) => u.url),
-    // Leaving isn't just logged - it ends the exam, the same way time running out does.
-    onLeave: () => void submit(true, "left_window"),
+    // Leaving isn't just logged - it ends the exam.
+    onLeave: () => void submit(true),
   });
 
   if (!ready) {
@@ -549,7 +548,7 @@ export function AttemptSession({
             <span className="px-2.5 py-1 rounded-lg bg-magi-surface border border-magi-border text-xs font-semibold text-magi-primary">
               {t("attemptSession.noTimeLimit")}
             </span>
-          ) : (
+          ) : remaining > 0 ? (
             <span
               role="timer"
               className={`px-2.5 py-1 rounded-lg bg-magi-surface border border-magi-border text-xs font-semibold tabular-nums ${
@@ -557,6 +556,15 @@ export function AttemptSession({
               }`}
             >
               {formatClock(remaining)}
+            </span>
+          ) : (
+            // the deadline passed, but nothing closes the attempt by itself - this just counts
+            // up how late the student is running, same slot the countdown used
+            <span
+              role="timer"
+              className="px-2.5 py-1 rounded-lg bg-magi-destructive/10 border border-magi-destructive text-xs font-bold text-magi-destructive tabular-nums"
+            >
+              {t("attemptSession.lateBy", { time: formatClock(-remaining) })}
             </span>
           )}
         </div>

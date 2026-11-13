@@ -170,6 +170,7 @@ const attemptSummarySchema = z.object({
   session_duration_unit: timeUnitSchema,
   expires_at: z.string(),
   remaining_seconds: z.number(),
+  late_seconds: z.number(),
   unlimited_time: z.boolean(),
   exam: attemptExamBriefSchema,
   score: z.number().optional(),
@@ -282,11 +283,11 @@ export async function syncAnswers(token: string, attemptId: number, answers: Ans
   };
   const envelope = await request(
     `/api/assignments/${attemptId}/answers`,
-    z.object({ success: z.literal(true), synced: z.number(), remaining_seconds: z.number() }),
+    z.object({ success: z.literal(true), synced: z.number(), remaining_seconds: z.number(), late_seconds: z.number() }),
     { method: "PUT", body: JSON.stringify(body) },
     token,
   );
-  return { synced: envelope.synced, remaining_seconds: envelope.remaining_seconds };
+  return { synced: envelope.synced, remaining_seconds: envelope.remaining_seconds, late_seconds: envelope.late_seconds };
 }
 
 /** Uploads a file as the answer to a `file_upload` question; `fileData` is base64, optionally with a `data:<mime>;base64,` prefix. */
