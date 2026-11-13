@@ -236,6 +236,14 @@ describe("AuthPanel", () => {
       expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
     });
 
+    it("still shows Start for a \"scheduled\" exam inside its window - that's its normal status, not just \"ongoing\"", async () => {
+      queueFetch([loginResponse, { status: 200, body: { success: true, exams: [{ ...exam, status: "scheduled", attempt_status: null }] } }]);
+      render(<AuthPanel />);
+      signIn();
+      await screen.findByText(/Test Exam/);
+      expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+    });
+
     it("shows Resume for an open attempt and picks it up on click", async () => {
       queueFetch([loginResponse, listWith("in_progress"), { status: 200, body: { success: false, message: "stop here" } }]);
       render(<AuthPanel />);

@@ -278,10 +278,14 @@ function ExamAction({
 // The app only ever shows what a student can act on right now - anything else (upcoming,
 // submitted, graded) is history/schedule, which belongs on the web, not here. An attempt already
 // in progress is always actionable: nothing closes it on its own anymore, deadline or not.
+// STARTABLE_EXAM_STATUSES in the backend's own attempt.service.ts is the source of truth for which
+// statuses POST /api/assignments will actually accept - "scheduled" belongs here too (it's the
+// normal status of an exam nobody has manually pushed to "ongoing"), not just "ongoing"/"demo".
+const STARTABLE_STATUSES = new Set(["scheduled", "ongoing", "demo"]);
 function isActionable(exam: ExamSummary): boolean {
   if (exam.attempt_status === "in_progress") return true;
   if (exam.attempt_status) return false; // submitted/auto_submitted/graded - nothing left to do
-  if (exam.status !== "ongoing" && exam.status !== "demo") return false;
+  if (!STARTABLE_STATUSES.has(exam.status)) return false;
   const now = Date.now();
   return now >= new Date(exam.scheduled_start).getTime() && now < new Date(exam.scheduled_end).getTime();
 }
