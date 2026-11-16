@@ -19,15 +19,15 @@ function LanguageSwitcher() {
     localStorage.setItem(LOCALE_KEY, code);
   };
   return (
-    <div className="flex items-center gap-0.5 p-0.5 rounded-lg border border-magi-border">
+    <div className="flex items-center gap-0.5 p-[3px] rounded-[10px] border border-magi-border">
       {LANGUAGES.map(({ code, label }) => (
         <button
           key={code}
           type="button"
           onClick={() => setLanguage(code)}
           aria-pressed={i18n.language === code}
-          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors ${
-            i18n.language === code ? "bg-magi-primary text-white" : "text-magi-secondary hover:text-magi-primary"
+          className={`px-3 py-1.5 rounded-[7px] text-xs font-bold transition-colors ${
+            i18n.language === code ? "bg-magi-primary text-white" : "text-magi-muted hover:text-magi-primary"
           }`}
         >
           {label}
@@ -70,15 +70,15 @@ function UpdateScreen({ update }: { update: Update }) {
 
   return (
     <div className="min-h-screen bg-magi-white text-magi-primary flex items-center justify-center px-6">
-      <div className="max-w-sm w-full text-center space-y-4">
+      <div className="glass-card max-w-sm w-full text-center space-y-4 p-8">
         <p className="font-outfit font-extrabold text-lg tracking-tight">{t("app.title")}</p>
-        <h1 className="text-xl font-bold">{t("update.title")}</h1>
+        <h1 className="text-xl font-bold font-outfit">{t("update.title")}</h1>
         <p className="text-sm text-magi-secondary">{t("update.body", { version: update.version })}</p>
         <button
           type="button"
           onClick={() => void install()}
           disabled={installing}
-          className="w-full py-3 rounded-lg bg-magi-primary text-white font-bold disabled:opacity-60"
+          className="w-full py-3 rounded-[10px] bg-magi-primary text-white font-bold hover:bg-magi-hover transition-colors disabled:opacity-60"
         >
           {installing ? (progress === null ? t("update.installing") : t("update.progress", { progress })) : t("update.button")}
         </button>
@@ -123,20 +123,20 @@ export function App() {
     <div className="min-h-screen bg-magi-white text-magi-primary flex flex-col">
       {/* no header/footer during an exam */}
       <header hidden={examRunning} className="sticky top-0 z-50 bg-magi-white border-b border-magi-border">
-        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
-          <span className="font-outfit font-extrabold text-lg tracking-tight">{t("app.title")}</span>
+        <div className="max-w-5xl mx-auto px-6 h-[84px] flex items-center justify-between">
+          <span className="font-outfit font-extrabold text-[22px] tracking-tight">{t("app.title")}</span>
           <LanguageSwitcher />
         </div>
       </header>
 
       <div className="flex flex-grow">
-        <main className={`flex-grow min-w-0 w-full ${examRunning ? "px-4 py-4" : "max-w-5xl mx-auto px-6 py-10"}`}>
+        <main className={`flex-grow min-w-0 w-full ${examRunning ? "px-4 py-4" : "max-w-5xl mx-auto px-6 py-12"}`}>
           <AuthPanel onExamRunning={setExamRunning} />
         </main>
       </div>
 
       <footer hidden={examRunning} className="bg-magi-white border-t border-magi-border py-6">
-        <p className="text-center text-xs text-magi-secondary font-light">{t("app.footer", { year: new Date().getFullYear() })}
+        <p className="text-center text-xs text-magi-muted">{t("app.footer", { year: new Date().getFullYear() })}
           {version && ` · v${version}`}
         </p>
       </footer>

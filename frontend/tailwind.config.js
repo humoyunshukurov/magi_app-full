@@ -18,8 +18,9 @@ export default {
       // web app read as one product.
       colors: {
         "magi-white": "#FFFFFF",
-        "magi-surface": "#F5F5F5",
-        "magi-border": "#E5E5E5",
+        "magi-surface": "#FAFAFA",
+        "magi-border": "#EDEDED",
+        "magi-muted": "#8A8A8A",
         "magi-primary": "#0A0A0A",
         "magi-secondary": "#6B6B6B",
         "magi-accent": "#1A1A1A",
@@ -29,6 +30,7 @@ export default {
       },
       fontFamily: {
         outfit: ["Outfit", "Inter", "system-ui", "sans-serif"],
+        inter: ["Inter", "system-ui", "sans-serif"],
       },
     },
   },

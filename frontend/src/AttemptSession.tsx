@@ -524,18 +524,18 @@ export function AttemptSession({
     <div className="space-y-4">
       <CameraPreview onEvent={(kind, detail, data) => log(kind, detail, { data })} />
       {/* Stays put while a long answer scrolls, so the countdown is never out of sight. */}
-      <div className="sticky top-0 z-20 flex items-center justify-between pb-3 -mx-4 px-4 pt-2 bg-magi-white/95 backdrop-blur-sm border-b border-magi-border">
-        <h3 className="text-lg font-bold font-outfit text-magi-primary">{attempt.exam.name}</h3>
+      <div className="sticky top-0 z-20 flex items-center justify-between px-5 py-3.5 rounded-[14px] bg-magi-surface/95 backdrop-blur-sm border border-magi-border">
+        <h3 className="text-[15px] font-bold font-outfit text-magi-primary">{attempt.exam.name}</h3>
         <div className="flex items-center gap-3">
-          <span className={`text-xs ${syncStatus === "failed" ? "text-magi-destructive" : "text-magi-secondary"}`}>{syncLabel}</span>
+          <span className={`text-xs ${syncStatus === "failed" ? "text-magi-destructive" : "text-magi-muted"}`}>{syncLabel}</span>
           {attempt.unlimited_time ? (
-            <span className="px-2.5 py-1 rounded-lg bg-magi-surface border border-magi-border text-xs font-semibold text-magi-primary">
+            <span className="px-2.5 py-1.5 rounded-lg bg-magi-white border border-magi-border text-xs font-bold text-magi-primary">
               {t("attemptSession.noTimeLimit")}
             </span>
           ) : remaining > 0 ? (
             <span
               role="timer"
-              className={`px-2.5 py-1 rounded-lg bg-magi-surface border border-magi-border text-xs font-semibold tabular-nums ${
+              className={`px-2.5 py-1.5 rounded-lg bg-magi-white border border-magi-border text-xs font-bold tabular-nums ${
                 remaining <= 60 ? "text-magi-destructive" : "text-magi-primary"
               }`}
             >
@@ -545,7 +545,7 @@ export function AttemptSession({
             // past the deadline - count up instead
             <span
               role="timer"
-              className="px-2.5 py-1 rounded-lg bg-magi-destructive/10 border border-magi-destructive text-xs font-bold text-magi-destructive tabular-nums"
+              className="px-2.5 py-1.5 rounded-lg bg-magi-destructive/10 border border-magi-destructive text-xs font-bold text-magi-destructive tabular-nums"
             >
               {t("attemptSession.lateBy", { time: formatClock(-remaining) })}
             </span>
@@ -577,12 +577,12 @@ export function AttemptSession({
             aria-label={t("attemptSession.questionNumber", { number: i + 1 })}
             aria-current={i === index ? "step" : undefined}
             onClick={() => setIndex(i)}
-            className={`w-8 h-8 rounded-lg border text-xs font-semibold transition-colors ${
+            className={`w-[34px] h-[34px] rounded-[9px] border text-[13px] font-bold transition-colors ${
               i === index
                 ? "border-magi-primary bg-magi-primary text-white"
                 : isAnswered(store.current[qq.question_id]!)
-                  ? "border-magi-primary bg-magi-surface text-magi-primary"
-                  : "border-magi-border bg-magi-white text-magi-secondary hover:border-magi-primary"
+                  ? "border-[#F2F2F2] bg-[#F2F2F2] text-magi-primary"
+                  : "border-magi-border bg-magi-white text-[#B0B0B0] hover:border-magi-primary hover:text-magi-primary"
             }`}
           >
             {i + 1}
@@ -590,10 +590,10 @@ export function AttemptSession({
         ))}
       </div>
 
-      <div className="glass-card p-4 space-y-3">
+      <div className="glass-card p-[22px] space-y-4">
         <div className="flex items-start justify-between gap-4">
-          <p className="text-sm font-medium text-magi-primary">{q.question}</p>
-          <span className="shrink-0 text-xs text-magi-secondary">{t("attemptSession.marksCount", { count: q.marks })}</span>
+          <p className="text-[15px] font-medium text-magi-primary">{q.question}</p>
+          <span className="shrink-0 text-xs text-magi-muted">{t("attemptSession.marksCount", { count: q.marks })}</span>
         </div>
 
         {TEXT_TYPES.has(q.question_type) ? (
@@ -621,7 +621,7 @@ export function AttemptSession({
                 type="button"
                 disabled={uploading}
                 onClick={() => void pickFile()}
-                className="px-4 py-2 text-xs font-bold rounded-lg border border-magi-border text-magi-primary hover:border-magi-primary transition-all disabled:opacity-60"
+                className="px-4 py-2 text-xs font-bold rounded-[10px] border border-magi-border text-magi-primary hover:border-magi-primary transition-all disabled:opacity-60"
               >
                 {uploading ? t("attemptSession.uploading") : s.answer ? t("attemptSession.replaceFile") : t("attemptSession.chooseFile")}
               </AnimatedButton>
@@ -633,9 +633,9 @@ export function AttemptSession({
               <button
                 key={opt.id}
                 onClick={() => choose(opt.id)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`rounded-[10px] border px-[18px] py-2.5 text-[13px] font-medium transition-colors ${
                   s.optionIds.includes(opt.id)
-                    ? "border-magi-primary bg-magi-primary text-white"
+                    ? "border-magi-primary bg-magi-primary text-white font-semibold"
                     : "border-magi-border bg-magi-surface text-magi-primary hover:border-magi-primary"
                 }`}
               >
@@ -647,7 +647,7 @@ export function AttemptSession({
       </div>
 
       {error && (
-        <div className="p-4 rounded-lg bg-red-50 border border-red-200">
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200">
           <p className="text-sm text-magi-destructive font-medium">{error}</p>
         </div>
       )}
@@ -657,7 +657,7 @@ export function AttemptSession({
           type="button"
           disabled={index === 0}
           onClick={() => setIndex(index - 1)}
-          className="px-3 py-2 text-sm rounded-lg border border-magi-border text-magi-secondary hover:text-magi-primary hover:bg-magi-surface transition-colors disabled:opacity-30"
+          className="px-[18px] py-2.5 text-sm font-semibold rounded-[10px] border border-magi-border text-magi-primary hover:bg-magi-surface transition-colors disabled:text-[#C7C7C7] disabled:hover:bg-transparent"
         >
           {t("attemptSession.previous")}
         </button>

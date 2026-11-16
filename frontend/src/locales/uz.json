@@ -97,6 +97,7 @@
     "logOut": "Chiqish",
     "examFallbackName": "Imtihon",
     "examsHeading": "Imtihonlar",
+    "examsSubtitle": "Sizga biriktirilgan test va uyga vazifalar",
     "reload": "Yangilash",
     "reloadExams": "Imtihonlar ro'yxatini yangilash"
   },

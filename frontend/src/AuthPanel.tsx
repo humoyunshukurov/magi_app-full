@@ -52,7 +52,7 @@ function storeSession(session: Session | null) {
 
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200">
+    <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200">
       <p className="text-sm text-magi-destructive font-medium">{message}</p>
     </div>
   );
@@ -184,7 +184,7 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
         <button
           type="button"
           onClick={fillTestAccount}
-          className="mb-4 w-full text-left p-3 rounded-lg bg-magi-surface border border-dashed border-magi-border hover:border-magi-primary transition-colors"
+          className="mb-4 w-full text-left p-3 rounded-[10px] bg-magi-surface border border-dashed border-magi-border hover:border-magi-primary transition-colors"
         >
           <p className="text-xs font-semibold text-magi-primary">{t("authPanel.testAccount")}</p>
           <p className="text-xs text-magi-secondary font-mono mt-0.5">humoyun@test.com / 123456</p>
@@ -193,7 +193,7 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
 
       {error && <ErrorBanner message={error} />}
       {notice && (
-        <div className="mb-4 p-4 rounded-lg bg-magi-success/10 border border-magi-success/20">
+        <div className="mb-4 p-4 rounded-xl bg-magi-success/10 border border-magi-success/20">
           <p className="text-sm text-magi-success font-medium">{notice}</p>
         </div>
       )}
@@ -259,7 +259,7 @@ function ExamAction({
     <AnimatedButton
       disabled={startingId !== null}
       onClick={() => onStart(exam.id)}
-      className="px-2.5 py-1 bg-magi-primary hover:bg-magi-hover text-white text-[10px] font-bold rounded-lg transition-colors disabled:opacity-60"
+      className="px-4 py-2 bg-magi-primary hover:bg-magi-hover text-white text-xs font-bold rounded-[10px] transition-colors disabled:opacity-60"
     >
       {resuming ? (busy ? t("authPanel.resuming") : t("authPanel.resume")) : busy ? t("authPanel.starting") : t("authPanel.start")}
     </AnimatedButton>
@@ -315,24 +315,34 @@ function ExamList({
   const { t } = useTranslation();
   const actionable = exams.filter(isActionable);
   if (actionable.length === 0) {
-    return <p className="text-sm text-magi-secondary font-light">{t("authPanel.noExams")}</p>;
+    return (
+      <div className="glass-card px-6 py-12 text-center">
+        <p className="text-sm text-magi-muted">{t("authPanel.noExams")}</p>
+      </div>
+    );
   }
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
       {sortExams(actionable).map((exam) => (
-        <div key={exam.id} className="p-4 rounded-lg bg-magi-surface border border-magi-border flex flex-col justify-between">
+        <div key={exam.id} className="glass-card lift p-[22px] flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-bold text-magi-primary">{exam.name}</h3>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-magi-border/60 text-magi-secondary">
+              <h3 className="text-base font-semibold text-magi-primary">{exam.name}</h3>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide bg-[#F2F2F2] text-magi-secondary">
                 {exam.kind === "homework" ? t("authPanel.homeworkAbbr") : t("authPanel.examLabel")}
               </span>
             </div>
-            <p className="text-magi-secondary text-xs font-light mt-1 uppercase tracking-wide">{exam.status}</p>
-            <p className="text-magi-secondary text-[11px] font-mono mt-0.5">{formatSchedule(exam.scheduled_start, exam.scheduled_end)}</p>
+            <p
+              className={`text-[11px] font-bold mt-2.5 uppercase tracking-wider ${
+                exam.status === "ongoing" || exam.attempt_status === "in_progress" ? "text-magi-success" : "text-magi-muted"
+              }`}
+            >
+              {exam.status}
+            </p>
+            <p className="text-magi-muted text-xs tabular-nums mt-0.5">{formatSchedule(exam.scheduled_start, exam.scheduled_end)}</p>
           </div>
-          <div className="mt-4 pt-3 border-t border-magi-border flex justify-between items-center text-xs">
-            <span className="text-magi-secondary">{t("authPanel.marksPassAt", { max: exam.max_marks, passing: exam.passing_marks })}</span>
+          <div className="mt-5 pt-4 border-t border-[#F2F2F2] flex justify-between items-center text-xs">
+            <span className="text-magi-muted">{t("authPanel.marksPassAt", { max: exam.max_marks, passing: exam.passing_marks })}</span>
             <ExamAction exam={exam} startingId={startingId} onStart={onStart} />
           </div>
         </div>
@@ -355,7 +365,7 @@ function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "l
   if (result.status !== "graded") {
     const message = reason === "left_window" ? t("authPanel.leftWindowSubmitted") : t("authPanel.answersSubmitted");
     return (
-      <div className="p-4 rounded-lg bg-magi-surface border border-magi-border">
+      <div className="glass-card p-5">
         <p className="text-sm font-semibold text-magi-primary">{message}</p>
         {lateNote && <p className="text-xs text-magi-destructive font-medium mt-1">{lateNote}</p>}
         <p className="text-xs text-magi-secondary mt-1">{t("authPanel.gradedSoon")}</p>
@@ -363,7 +373,7 @@ function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "l
     );
   }
   return (
-    <div className="p-4 rounded-lg bg-magi-success/10 border border-magi-success/20">
+    <div className="p-5 rounded-[18px] bg-magi-success/10 border border-magi-success/20">
       <p className="text-sm font-semibold text-magi-success">
         {t("authPanel.gradedResult", {
           score: result.score ?? "?",
@@ -528,13 +538,18 @@ export function AuthPanel({
   }
 
   return (
-    <div className={`glass-card p-6 mx-auto ${attempt || checking ? "w-[95%]" : "max-w-3xl"}`}>
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-magi-border">
-        <div>
-          <h2 className="text-lg font-bold font-outfit text-magi-primary">
-            {session.user.first_name} {session.user.last_name}
-          </h2>
-          <p className="text-xs text-magi-secondary">{session.user.email}</p>
+    <div className={`mx-auto ${attempt || checking ? "glass-card p-6 w-[95%]" : "max-w-4xl"}`}>
+      <div className="flex items-center justify-between mb-8 pb-5 border-b border-magi-border">
+        <div className="flex items-center gap-3">
+          <span className="w-10 h-10 rounded-full bg-magi-primary text-white flex items-center justify-center text-sm font-bold font-outfit">
+            {session.user.first_name.charAt(0).toUpperCase()}
+          </span>
+          <div>
+            <h2 className="text-base font-bold font-outfit text-magi-primary">
+              {session.user.first_name} {session.user.last_name}
+            </h2>
+            <p className="text-xs text-magi-muted">{session.user.email}</p>
+          </div>
         </div>
         {/* hidden while locked - logging out would skip the violation logging */}
         {!checking && !attempt && (
@@ -575,15 +590,18 @@ export function AuthPanel({
         />
       ) : (
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold text-magi-primary">{t("authPanel.examsHeading")}</h3>
+          <div className="flex items-end justify-between mb-7">
+            <div>
+              <h3 className="text-3xl font-bold font-outfit tracking-tight text-magi-primary">{t("authPanel.examsHeading")}</h3>
+              <p className="text-sm text-magi-muted mt-1.5">{t("authPanel.examsSubtitle")}</p>
+            </div>
             <button
               type="button"
               onClick={() => void reloadExams()}
               disabled={reloading}
               title={t("authPanel.reload")}
               aria-label={t("authPanel.reloadExams")}
-              className="w-8 h-8 flex items-center justify-center rounded-md border border-magi-border text-magi-secondary hover:text-magi-primary hover:border-magi-primary transition-colors disabled:opacity-50"
+              className="w-9 h-9 flex items-center justify-center rounded-[10px] border border-magi-border text-magi-muted hover:text-magi-primary hover:border-magi-primary transition-colors disabled:opacity-50"
             >
               <ReloadIcon spinning={reloading} />
             </button>
