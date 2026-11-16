@@ -6,6 +6,7 @@ import { activityLog, appQuit, cameraStart, draftClear, draftLoad, draftSave, en
 import { LINK_GRACE_MS, POLL_MS, QUIT_DELAY_MS, SHOT_DELAY_MS, SHOT_GAP_MS, SHOT_LIMIT } from "./useExamGuard";
 
 vi.mock("./cameraWatch", async (importOriginal) => ({ ...(await importOriginal<typeof import("./cameraWatch")>()), loadDetector: () => new Promise(() => {}) }));
+vi.mock("./useMicrophone", () => ({ useMicrophone: () => ({ problem: null, isSpeaking: () => false }) }));
 vi.mock("./ipc", () => ({
   draftSave: vi.fn(),
   draftLoad: vi.fn(),
@@ -280,6 +281,9 @@ describe("AttemptSession", () => {
     const onFinished = renderSession();
     await flush();
 
+    fireEvent.click(screen.getByRole("button", { name: "Next →" }));
+    await flush();
+
     fireEvent.click(screen.getByRole("button", { name: "Submit attempt" }));
     await flush();
 
@@ -295,6 +299,9 @@ describe("AttemptSession", () => {
     const onFinished = renderSession();
     await flush();
 
+    fireEvent.click(screen.getByRole("button", { name: "Next →" }));
+    await flush();
+
     fireEvent.click(screen.getByRole("button", { name: "Submit attempt" }));
     await flush();
 
@@ -306,6 +313,9 @@ describe("AttemptSession", () => {
     vi.mocked(submitAttempt).mockRejectedValue(new Error("network blip"));
     vi.mocked(getAttempt).mockRejectedValue(new Error("still offline"));
     const onFinished = renderSession();
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next →" }));
     await flush();
 
     fireEvent.click(screen.getByRole("button", { name: "Submit attempt" }));
@@ -440,7 +450,7 @@ describe("AttemptSession", () => {
       const [summary] = logged("question_summary");
       expect(summary).toMatchObject({ question_id: 1 });
       expect(dataOf(summary)).toEqual({
-        label: "Question 1 (essay)", position: 1, typed: 5, edited: 0, deleted: 0, pasted: 0, typing_seconds: 0,
+        label: "Question 1 (essay)", position: 1, typed: 5, edited: 0, deleted: 0, pasted: 0, paste_events: 0, typing_seconds: 0,
         freeze_count: 0, longest_freeze_seconds: 0, time_spent_seconds: 3, answered: true,
       });
     });

@@ -1,6 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadDetector, type Look } from "./cameraWatch";
+import { AWAY_MS, loadDetector, type Look } from "./cameraWatch";
 import { PHOTO_LIMIT, TICK_MS, useCameraWatch } from "./useCameraWatch";
 
 vi.mock("./cameraWatch", async (importOriginal) => ({ ...(await importOriginal<typeof import("./cameraWatch")>()), loadDetector: vi.fn() }));
@@ -19,6 +19,8 @@ let looks: Look[];
 const detector = { look: vi.fn(), close: vi.fn() };
 const onEvent = vi.fn();
 const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+// enough empty looks to cross AWAY_MS
+const nobody = (): Look[] => Array.from({ length: AWAY_MS / TICK_MS + 1 }, (_, i) => ({ faces: 0, phone: i % 2 ? null : false, voice: null, turned: null, extraBody: null }));
 
 function watch(running = true) {
   const picture = fakePicture();
@@ -42,18 +44,18 @@ afterEach(() => {
 
 describe("useCameraWatch", () => {
   it("takes a photo and reports it when nobody has been in front of the camera for a few seconds", async () => {
-    looks = [{ faces: 0, phone: false, voice: null, turned: null, extraBody: null }, { faces: 0, phone: null, voice: null, turned: null, extraBody: null }, { faces: 0, phone: false, voice: null, turned: null, extraBody: null }, { faces: 0, phone: null, voice: null, turned: null, extraBody: null }];
+    looks = nobody();
     watch();
-    await advance(TICK_MS * 3); // the first look is right away, then one a second
+    await advance(AWAY_MS); // the first look is right away, then one every tick
 
     expect(onEvent).toHaveBeenCalledTimes(1);
     expect(onEvent).toHaveBeenCalledWith("camera_away", "Nobody in front of the camera", { image: PHOTO });
   });
 
   it("says how long it was when the student comes back", async () => {
-    looks = [{ faces: 0, phone: false, voice: null, turned: null, extraBody: null }, { faces: 0, phone: null, voice: null, turned: null, extraBody: null }, { faces: 0, phone: false, voice: null, turned: null, extraBody: null }, { faces: 0, phone: null, voice: null, turned: null, extraBody: null }, { faces: 1, phone: false, voice: null, turned: null, extraBody: null }];
+    looks = [...nobody(), { faces: 1, phone: false, voice: null, turned: null, extraBody: null }];
     watch();
-    await advance(TICK_MS * 6);
+    await advance(AWAY_MS + TICK_MS * 2);
 
     expect(onEvent).toHaveBeenLastCalledWith("camera_back", expect.stringContaining("Back in front of the camera"), { away_seconds: expect.any(Number) });
   });

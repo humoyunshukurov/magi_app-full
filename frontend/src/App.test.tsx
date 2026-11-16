@@ -52,10 +52,10 @@ describe("App", () => {
   });
 
   it("hides the header and footer while an exam is open", async () => {
-    const exam = { id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2026-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
+    const exam = { id: 15, name: "Test Exam", kind: "exam", scheduled_start: "2026-01-01T00:00:00Z", scheduled_end: "2099-01-01T01:00:00Z", status: "scheduled", max_marks: 10, passing_marks: 5 };
     const attempt = {
       id: 28, exam_id: 15, status: "in_progress", started_at: null, submitted_at: null, auto_submitted: false,
-      session_duration: 60, session_duration_unit: "seconds", expires_at: "2099-01-01T00:01:00Z", remaining_seconds: 60, exam,
+      session_duration: 60, session_duration_unit: "seconds", expires_at: "2099-01-01T00:01:00Z", remaining_seconds: 60, late_seconds: 0, unlimited_time: false, exam,
       questions: [{
         question_id: 26, position: 1, title: "Q1", question: "Is this a test?", question_type: "multiple_choice",
         expected_duration: 60, expected_duration_unit: "seconds", marks: 10,
@@ -69,7 +69,7 @@ describe("App", () => {
       { status: 200, body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } },
       { status: 200, body: { success: true, exams: [exam] } },
       { status: 200, body: { success: true, attempt } },
-      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55 } },
+      { status: 200, body: { success: true, synced: 1, remaining_seconds: 55, late_seconds: 0 } },
       { status: 200, body: { success: true, attempt: { ...attempt, status: "submitted", submitted_at: "2026-01-01T00:00:10Z", remaining_seconds: 0 }, message: "ok" } },
     ]);
 

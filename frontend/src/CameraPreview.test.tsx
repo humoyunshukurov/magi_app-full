@@ -4,6 +4,7 @@ import { CameraPreview } from "./CameraPreview";
 import { cameraStart, cameraStop, onCameraFrame, onCameraLost } from "./ipc";
 
 vi.mock("./cameraWatch", async (importOriginal) => ({ ...(await importOriginal<typeof import("./cameraWatch")>()), loadDetector: () => new Promise(() => {}) }));
+vi.mock("./useMicrophone", () => ({ useMicrophone: () => ({ problem: null, isSpeaking: () => false }) }));
 vi.mock("./ipc", () => ({ cameraStart: vi.fn(), cameraStop: vi.fn(), onCameraFrame: vi.fn(), onCameraLost: vi.fn() }));
 
 function stubCamera(getUserMedia?: () => Promise<unknown>) {
