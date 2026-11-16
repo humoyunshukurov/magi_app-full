@@ -2631,6 +2631,8 @@ dependencies = [
  "magi-core",
  "magi-storage",
  "magi-types",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
  "serde",
  "serde_json",
  "sysinfo",

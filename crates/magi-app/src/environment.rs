@@ -115,7 +115,7 @@ fn classify_windows(our_pid: u32, windows: impl Iterator<Item = (u32, String, St
 /// switch to - checked where the OS actually allows one app to see another's windows. Windows and
 /// macOS have no Wayland-style blind spot, so `process_names` (Linux's fallback - see below) goes
 /// unused here.
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(target_os = "windows")]
 fn other_windows(_process_names: &[String]) -> Vec<String> {
     let Ok(windows) = xcap::Window::all() else {
         return Vec::new();
@@ -127,6 +127,55 @@ fn other_windows(_process_names: &[String]) -> Vec<String> {
         (w.pid().unwrap_or(our_pid), app_name, title, w.is_minimized().unwrap_or(false))
     });
     classify_windows(our_pid, info)
+}
+
+/// macOS: xcap's window list also has every menu bar icon, the Dock, Control Center, Spotlight and
+/// so on, which a student can't close - so on a Mac nobody could get past the check. Read the list
+/// ourselves and keep only layer 0, the normal app windows.
+#[cfg(target_os = "macos")]
+fn other_windows(_process_names: &[String]) -> Vec<String> {
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFNumberType, CFString};
+    use objc2_core_graphics::{CGWindowListCopyWindowInfo, CGWindowListOption};
+    use std::ffi::c_void;
+
+    fn value(dict: &CFDictionary, key: &str) -> *const c_void {
+        let key = CFString::from_str(key);
+        unsafe { dict.value((key.as_ref() as *const CFString).cast()) }
+    }
+    fn number(dict: &CFDictionary, key: &str) -> Option<f64> {
+        let ptr = value(dict, key) as *const CFNumber;
+        let mut out = 0f64;
+        let ok = !ptr.is_null() && unsafe { (*ptr).value(CFNumberType::DoubleType, &mut out as *mut f64 as *mut c_void) };
+        ok.then_some(out)
+    }
+    fn string(dict: &CFDictionary, key: &str) -> String {
+        let ptr = value(dict, key) as *const CFString;
+        if ptr.is_null() { String::new() } else { unsafe { (*ptr).to_string() } }
+    }
+
+    let options = CGWindowListOption::OptionOnScreenOnly | CGWindowListOption::ExcludeDesktopElements;
+    let Some(list) = CGWindowListCopyWindowInfo(options, 0) else {
+        return Vec::new();
+    };
+    let our_pid = std::process::id();
+    let mut info = Vec::new();
+    for i in 0..list.count() {
+        let Some(dict) = (unsafe { (list.value_at_index(i) as *const CFDictionary).as_ref() }) else {
+            continue;
+        };
+        if number(dict, "kCGWindowLayer") != Some(0.0) || number(dict, "kCGWindowAlpha").unwrap_or(1.0) <= 0.0 {
+            continue;
+        }
+        // tiny invisible helper windows some apps keep around
+        let bounds = unsafe { (value(dict, "kCGWindowBounds") as *const CFDictionary).as_ref() };
+        let size = bounds.map(|b| (number(b, "Width").unwrap_or(0.0), number(b, "Height").unwrap_or(0.0)));
+        if size.is_some_and(|(w, h)| w < 50.0 || h < 50.0) {
+            continue;
+        }
+        let pid = number(dict, "kCGWindowOwnerPID").map_or(our_pid, |p| p as u32);
+        info.push((pid, string(dict, "kCGWindowOwnerName"), string(dict, "kCGWindowName"), false));
+    }
+    classify_windows(our_pid, info.into_iter())
 }
 
 /// Editors, office suites and other everyday apps that are neither a browser (its own exemption,
