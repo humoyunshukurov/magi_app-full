@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
 import { setUpdating } from "./updateState";
 import { AuthPanel } from "./AuthPanel";
 import { LOCALE_KEY } from "./i18n";
@@ -96,9 +97,11 @@ export function App() {
   const [examRunning, setExamRunning] = useState(false);
   // undefined while checking, null when up to date
   const [update, setUpdate] = useState<Update | null | undefined>(undefined);
+  const [version, setVersion] = useState("");
 
   // ADR-0008: check once per launch. a newer version blocks everything, even sign in
   useEffect(() => {
+    getVersion().then(setVersion).catch(() => undefined);
     check({ timeout: 15000 })
       .then((found) => setUpdate(found))
       .catch((e) => {
@@ -133,7 +136,9 @@ export function App() {
       </div>
 
       <footer hidden={examRunning} className="bg-magi-white border-t border-magi-border py-6">
-        <p className="text-center text-xs text-magi-secondary font-light">{t("app.footer", { year: new Date().getFullYear() })}</p>
+        <p className="text-center text-xs text-magi-secondary font-light">{t("app.footer", { year: new Date().getFullYear() })}
+          {version && ` · v${version}`}
+        </p>
       </footer>
     </div>
   );
