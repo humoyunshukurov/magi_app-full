@@ -139,5 +139,14 @@
     "takePhotoAndStart": "Take the photo and start the exam",
     "startingCamera": "Starting camera…",
     "clockStarts": "The exam clock starts when you press the button."
+  },
+  "update": {
+    "checking": "Checking for updates…",
+    "title": "A new version is available",
+    "body": "Version {{version}} is out. Update the app to continue.",
+    "button": "Update",
+    "installing": "Updating…",
+    "progress": "Updating… {{progress}}%",
+    "failed": "The update failed. Check your internet connection and try again."
   }
 }

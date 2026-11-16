@@ -9,7 +9,11 @@ vi.mock("./PreExam", async () => {
   };
 });
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => undefined)) }));
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn(() => Promise.resolve(null)) }));
+vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn(() => Promise.resolve()) }));
 
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { App } from "./App";
 
 function queueFetch(responses: Array<{ status: number; body: unknown }>) {
@@ -31,6 +35,25 @@ afterEach(() => {
 });
 
 describe("App", () => {
+  it("shows only an Update button when a newer version is out, never the sign in", async () => {
+    const downloadAndInstall = vi.fn(() => Promise.resolve());
+    vi.mocked(check).mockResolvedValueOnce({ version: "9.9.9", downloadAndInstall } as never);
+    render(<App />);
+
+    expect(await screen.findByText(/9\.9\.9/)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Sign In" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await vi.waitFor(() => expect(relaunch).toHaveBeenCalled());
+    expect(downloadAndInstall).toHaveBeenCalled();
+  });
+
+  it("goes on to sign in when the update check fails", async () => {
+    vi.mocked(check).mockRejectedValueOnce(new Error("offline"));
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Sign In" })).toBeTruthy();
+  });
+
   it("signs in and shows the exam list, with no sidebar at all", async () => {
     queueFetch([
       { status: 200, body: { success: true, token: "tok", user: { id: 1, first_name: "Curl", last_name: null, email: "s@example.com", role: "student" } } },

@@ -139,5 +139,14 @@
     "takePhotoAndStart": "Suratga olib, imtihonni boshlash",
     "startingCamera": "Kamera ishga tushirilmoqda…",
     "clockStarts": "Tugmani bosganingizda imtihon vaqti boshlanadi."
+  },
+  "update": {
+    "checking": "Yangilanishlar tekshirilmoqda…",
+    "title": "Yangi versiya chiqdi",
+    "body": "{{version}} versiyasi chiqdi. Davom etish uchun ilovani yangilang.",
+    "button": "Yangilash",
+    "installing": "Yangilanmoqda…",
+    "progress": "Yangilanmoqda… {{progress}}%",
+    "failed": "Yangilab bo'lmadi. Internetni tekshirib, qayta urinib ko'ring."
   }
 }

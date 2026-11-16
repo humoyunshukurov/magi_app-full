@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { check } from "@tauri-apps/plugin-updater";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { setUpdating } from "./updateState";
 import { AuthPanel } from "./AuthPanel";
@@ -36,26 +36,85 @@ function LanguageSwitcher() {
   );
 }
 
+function UpdateScreen({ update }: { update: Update }) {
+  const { t } = useTranslation();
+  const [installing, setInstalling] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  // windows quits by itself after installing, mac/linux need relaunch()
+  const install = async () => {
+    setInstalling(true);
+    setFailed(false);
+    setUpdating(true);
+    let total = 0;
+    let done = 0;
+    try {
+      await update.downloadAndInstall((e) => {
+        if (e.event === "Started") total = e.data.contentLength ?? 0;
+        else if (e.event === "Progress" && total) {
+          done += e.data.chunkLength;
+          setProgress(Math.min(100, Math.round((done / total) * 100)));
+        }
+      });
+      await relaunch();
+    } catch (e) {
+      console.error("update failed:", e);
+      setUpdating(false);
+      setInstalling(false);
+      setProgress(null);
+      setFailed(true);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-magi-white text-magi-primary flex items-center justify-center px-6">
+      <div className="max-w-sm w-full text-center space-y-4">
+        <p className="font-outfit font-extrabold text-lg tracking-tight">{t("app.title")}</p>
+        <h1 className="text-xl font-bold">{t("update.title")}</h1>
+        <p className="text-sm text-magi-secondary">{t("update.body", { version: update.version })}</p>
+        <button
+          type="button"
+          onClick={() => void install()}
+          disabled={installing}
+          className="w-full py-3 rounded-lg bg-magi-primary text-white font-bold disabled:opacity-60"
+        >
+          {installing ? (progress === null ? t("update.installing") : t("update.progress", { progress })) : t("update.button")}
+        </button>
+        {failed && (
+          <p role="alert" className="text-sm text-magi-destructive">
+            {t("update.failed")}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const { t } = useTranslation();
   const [examRunning, setExamRunning] = useState(false);
+  // undefined while checking, null when up to date
+  const [update, setUpdate] = useState<Update | null | undefined>(undefined);
 
-  // ADR-0008: check once per launch, PreExam waits while it downloads.
-  // windows quits by itself after installing, mac/linux need relaunch()
+  // ADR-0008: check once per launch. a newer version blocks everything, even sign in
   useEffect(() => {
-    (async () => {
-      try {
-        const update = await check();
-        if (!update) return;
-        setUpdating(true);
-        await update.downloadAndInstall();
-        await relaunch();
-      } catch (e) {
+    check({ timeout: 15000 })
+      .then((found) => setUpdate(found))
+      .catch((e) => {
         console.error("update check failed:", e);
-        setUpdating(false);
-      }
-    })();
+        setUpdate(null);
+      });
   }, []);
+
+  if (update === undefined) {
+    return (
+      <div className="min-h-screen bg-magi-white flex items-center justify-center">
+        <p className="text-sm text-magi-secondary font-light">{t("update.checking")}</p>
+      </div>
+    );
+  }
+  if (update) return <UpdateScreen update={update} />;
 
   return (
     <div className="min-h-screen bg-magi-white text-magi-primary flex flex-col">
