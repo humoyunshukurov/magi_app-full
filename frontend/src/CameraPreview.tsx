@@ -1,5 +1,4 @@
-// The webcam, on for as long as an exam is open. The picture is only shown to the student, never
-// recorded or sent anywhere - the microphone alongside it is a separate story, see useMicrophone.ts.
+// webcam preview, only shown to the student, never recorded
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -34,8 +33,7 @@ export function CameraPreview({
     mic.isSpeaking,
   );
 
-  // The tile can be dragged anywhere the student likes (it can sit over the text they're
-  // writing) - tracked as distance from the bottom-right corner, where it starts.
+  // draggable, offset from the bottom-right corner
   const [pos, setPos] = useState({ bottom: EDGE_MARGIN, right: EDGE_MARGIN });
   const drag = useRef<{ pointerId: number; startX: number; startY: number; startBottom: number; startRight: number } | null>(null);
 

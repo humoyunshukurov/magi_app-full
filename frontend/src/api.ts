@@ -1,26 +1,13 @@
-// Typed client for magi-backend (the same Node API magi-admin and magi-frontend use) over
-// bearer auth: the desktop app can't rely on a browser's cookie jar the way the web apps do,
-// so login also returns the session token in the body and every request after that sends
-// `Authorization: Bearer <token>` - magi-backend's protectRoute accepts either.
-//
-// magi-backend's envelope is resource-keyed (`{success, exam}`, `{success, exams}`, …), not a
-// uniform `{success, data}` - each function below declares the literal shape its endpoint
-// actually returns and unwraps it, so every caller elsewhere in the app still just gets the
-// plain value it asks for.
+// client for magi-backend with bearer auth (no cookie jar in the desktop app).
+// each endpoint unwraps its own response key ({success, exam}, {success, exams}...)
 
 import { z } from "zod";
-// the webview's own fetch is subject to the page's CSP/origin like any browser and can't reach
-// an http:// API from a tauri:// page; this plugin makes the request from Rust instead, so there's
-// no Origin header or cross-origin restriction at all - matching the bearer-auth design below.
+// request goes out from rust, so no CORS/origin problems
 import { fetch } from "@tauri-apps/plugin-http";
 
 const BASE_URL = import.meta.env.VITE_MAGI_BACKEND_URL ?? "http://localhost:8000";
 
-/**
- * Thrown for both network failures and `{success: false}` responses - `kind` tells them apart:
- * "network" means the server was never reached (e.g. mid-restart), "response" means it answered
- * and said no (bad credentials, expired token, ...).
- */
+/** kind: "network" = never reached the server, "response" = server said no */
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -115,8 +102,6 @@ const myProfileSchema = z.object({
   profile: z.object({ id_number: z.string().nullable() }),
 });
 
-/** The student's own ID card number, set by whoever created their account - what the pre-exam
- * check compares against what they type, instead of accepting anything. */
 export async function getMyIdNumber(token: string) {
   const envelope = await request("/api/auth/me/profile", myProfileSchema, { method: "GET" }, token);
   return envelope.profile.id_number;
@@ -290,7 +275,7 @@ export async function syncAnswers(token: string, attemptId: number, answers: Ans
   return { synced: envelope.synced, remaining_seconds: envelope.remaining_seconds, late_seconds: envelope.late_seconds };
 }
 
-/** Uploads a file as the answer to a `file_upload` question; `fileData` is base64, optionally with a `data:<mime>;base64,` prefix. */
+/** fileData is base64, data: prefix optional */
 export async function uploadAnswerFile(token: string, attemptId: number, questionId: number, fileName: string, fileData: string) {
   const envelope = await request(
     `/api/assignments/${attemptId}/file`,
@@ -331,7 +316,6 @@ const cheatingTypeSchema = z.enum([
 ]);
 export type CheatingType = z.infer<typeof cheatingTypeSchema>;
 
-/** Records an auto-detected incident server-side, so staff can see it on the attempt without the student's own machine. */
 export async function reportCheating(token: string, attemptId: number, name: CheatingType, explanation: string) {
   const envelope = await request(
     `/api/cheatings/attempts/${attemptId}`,
@@ -348,8 +332,6 @@ export async function reportCheating(token: string, attemptId: number, name: Che
 export type MonitoringKind = "panoramic-views" | "video-recordings" | "face-snapshots" | "snapshots" | "audio-recordings";
 const mediaRecordSchema = z.object({ id: z.number(), url: z.string(), label: z.string().nullable(), created_at: z.string() });
 
-/** Uploads one photo (a `data:image/jpeg;base64,...` string), or for `audio-recordings` one clip
- * (a `data:audio/webm;base64,...` string), so staff can see/hear it without the student's own machine. */
 export async function uploadMedia(token: string, attemptId: number, kind: MonitoringKind, payload: string, label?: string) {
   const body = kind === "audio-recordings" ? { audio: payload, label } : { image: payload, label };
   const envelope = await request(
@@ -369,7 +351,6 @@ const identityCheckSchema = z.object({
 });
 export type IdentityCheck = z.infer<typeof identityCheckSchema>;
 
-/** The entry gate before an exam: does this photo match the student's own reference photo, if they ever set one? */
 export async function checkIdentity(token: string, image: string) {
   return request("/api/auth/me/identity-check", identityCheckSchema, { method: "POST", body: JSON.stringify({ image }) }, token);
 }

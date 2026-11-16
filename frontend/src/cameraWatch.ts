@@ -1,7 +1,4 @@
-// Looks at the camera picture for what matters during an exam: a phone in view, nobody in front
-// of the camera, more than one face in it, and (from the microphone, not the picture) whether
-// there's voice activity while that second face is there. Everything runs on this computer
-// (MediaPipe for video, the Web Audio API for voice level); no picture or audio ever leaves it.
+// phone, nobody there, extra person, talking. all runs locally (mediapipe + web audio)
 
 /** What one look at the camera (and, for voice, the microphone) found. */
 export interface Look {
@@ -10,33 +7,24 @@ export interface Look {
   phone: boolean | null;
   /** null when there's no microphone to check */
   voice: boolean | null;
-  /** Head turned sharply away from the camera - null when there isn't exactly one clear face to
-   * judge it from (with zero or several faces, this isn't meaningful). */
+  /** null unless there's exactly one face */
   turned: boolean | null;
-  /** A second person-shaped object in frame, from the general object model rather than the face
-   * model - catches someone passing by whose face isn't clearly visible (back of head, side
-   * profile, half out of frame), which blaze_face alone misses. null on a look that didn't check
-   * (same cadence as the phone check, it's the same costly model). */
+  /** person from the object model - catches someone whose face isn't visible. null when not checked */
   extraBody: boolean | null;
 }
 
-// BlazeFace's documented keypoint order for a face detection: right eye, left eye, nose tip,
-// mouth center, right ear tragion, left ear tragion (in image space, not mirrored).
+// right eye, left eye, nose, mouth, right ear, left ear
 const RIGHT_EYE = 0;
 const LEFT_EYE = 1;
 const NOSE_TIP = 2;
 
-/** The eyes are too close together in the frame (small, far away, or a bad angle) to trust the
- * nose-offset estimate below at all. */
+/** eyes too close together to trust the estimate */
 const MIN_EYE_SPAN = 0.02;
-/** How far off-center (0 = at the right eye, 1 = at the left eye, 0.5 = centered) the nose can
- * sit before this counts as a sharp turn, not just an ordinary head angle while thinking/reading. */
+/** 0.5 = centered */
 const TURN_LOW = 0.28;
 const TURN_HIGH = 0.72;
 
-/** A rough yaw estimate from the detector's own keypoints - no extra model, no extra cost, just
- * reading more of what BlazeFace already computed. Approximate by nature (no real 3D head pose),
- * which is why the judge below still demands this hold for several looks in a row. */
+/** rough yaw from the keypoints we already have */
 export function headTurned(keypoints: { x: number; y: number }[]): boolean | null {
   const rightEye = keypoints[RIGHT_EYE];
   const leftEye = keypoints[LEFT_EYE];
@@ -49,8 +37,7 @@ export function headTurned(keypoints: { x: number; y: number }[]): boolean | nul
 }
 
 export interface Detector {
-  /** Finding a phone (and a second person's silhouette) is the costly part, so it only runs when
-   * asked for - one object-model pass covers both, since it's the same forward pass either way. */
+  /** slow, so only when asked */
   look(picture: HTMLCanvasElement, options: { phone: boolean }): Look;
   close(): void;
 }
@@ -67,8 +54,7 @@ export async function loadDetector(): Promise<Detector> {
     runningMode: "IMAGE",
     minDetectionConfidence: 0.5,
   });
-  // "person" alongside "cell phone" - one inference pass answers both, so counting a second
-  // person-shaped object costs nothing beyond what the phone check already pays for
+  // same pass as the phone check
   const objects = await ObjectDetector.createFromOptions(vision, {
     baseOptions: { modelAssetPath: `${BASE}/models/efficientdet_lite0.tflite`, delegate: "CPU" },
     canvas: document.createElement("canvas"),
@@ -111,31 +97,23 @@ export type Verdict =
 export const AWAY_MS = 2000;
 /** Phone-check results worth remembering at once, oldest first. */
 const PHONE_WINDOW = 3;
-/** Hits needed within that window to believe there is a phone - out of the last PHONE_WINDOW
- * checks, not strictly back to back, so one flaky miss from the model doesn't throw away a real
- * detection (object detection on a phone held at an angle or partly out of frame is not perfectly
- * consistent look to look). */
+/** hits out of the last PHONE_WINDOW, the model misses some frames */
 const PHONE_LOOKS = 2;
 /** Looks in a row without a phone before a phone can be reported again. */
 const PHONE_GONE_LOOKS = 3;
 /** The same thing isn't reported again this soon. */
 const PHONE_COOLDOWN_MS = 10_000;
-/** Two looks (1s) rather than one - BlazeFace occasionally reports a second face on a single
- * frame that isn't really there (a reflection, a hand, a bad angle), and a one-look trigger
- * reports that noise as a confirmed incident just as readily as a real second person. */
+/** two looks, a single frame gives false positives */
 const EXTRA_PERSON_LOOKS = 2;
 /** Looks in a row back down to one face before an extra person can be reported again. */
 const EXTRA_PERSON_GONE_LOOKS = 2;
-/** Looks in a row with a second face AND voice activity at once, at 500ms each - about 1.5s of
- * an actual back-and-forth, not a cough or a one-off word that happened to overlap with someone
- * passing by. */
+/** ~1.5s of second face + voice */
 const TALKING_LOOKS = 3;
 /** Looks in a row without that combination before talking can be reported again. */
 const TALKING_GONE_LOOKS = 3;
 /** The same thing isn't reported again this soon - a single conversation shouldn't spam incidents. */
 const TALKING_COOLDOWN_MS = 15_000;
-/** Looks in a row with the head turned sharply away, at 500ms each - a couple of seconds of it,
- * not a quick glance to the side while thinking. */
+/** a couple of seconds, not a glance */
 const LOOKING_AWAY_LOOKS = 4;
 /** Looks in a row facing forward again before this can be reported again. */
 const LOOKING_AWAY_GONE_LOOKS = 3;
@@ -181,9 +159,7 @@ export function createJudge() {
         away = false;
       }
 
-      // either the face model sees a second face, or the (slower) object model sees a second
-      // person-shaped thing when the face model couldn't - catches a passerby face-on detection
-      // missed (back of head, side profile, half out of frame)
+      // face model or object model
       if (look.faces > 1 || look.extraBody) {
         extraPersonLooks += 1;
         extraPersonClearLooks = 0;
@@ -198,10 +174,7 @@ export function createJudge() {
         if (extraPersonClearLooks >= EXTRA_PERSON_GONE_LOOKS) extraPersonReported = false;
       }
 
-      // independent of extra_person's own report/cooldown above - this tracks the current
-      // moment's condition (second person + voice) directly, not whether extra_person already
-      // fired. Same "is someone else there" signal as extra_person above (face OR object model) -
-      // a second person whose face isn't clearly visible can still be heard.
+      // separate from extra_person's cooldown
       if ((look.faces > 1 || look.extraBody) && look.voice) {
         talkingLooks += 1;
         talkingClearLooks = 0;
@@ -216,8 +189,7 @@ export function createJudge() {
         if (talkingClearLooks >= TALKING_GONE_LOOKS) talkingReported = false;
       }
 
-      // null (not exactly one clear face) leaves this alone rather than resetting it - a brief
-      // overlap with someone passing by shouldn't throw away an otherwise sustained turn
+      // don't reset on null
       if (look.turned !== null) {
         if (look.turned) {
           turnedLooks += 1;

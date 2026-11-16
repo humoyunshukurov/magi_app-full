@@ -1,6 +1,3 @@
-// The webcam: opens it, keeps it open while the screen that asked for it is shown, and can take a
-// photo of what it sees. Used by the check before the exam and by the exam itself.
-
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cameraStart, cameraStop, onCameraFrame, onCameraLost } from "./ipc";
@@ -81,8 +78,7 @@ export function useCamera(onEvent: (kind: CameraEventKind, detail: string) => vo
     };
   }, []);
 
-  /** A photo of what the camera sees right now, as a JPEG data URL plus the canvas it came from
-   * (for a face-detection pass before it's sent anywhere); null when there is no picture yet. */
+  /** jpeg data url + canvas, null if no picture yet */
   const grab = (): { dataUrl: string; canvas: HTMLCanvasElement } | null => {
     const picture = source === "app" ? image.current : video.current;
     if (!picture) return null;

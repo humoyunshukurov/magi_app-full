@@ -1,37 +1,23 @@
-// The microphone during an exam. Its volume level, read live, feeds two things: whether there's
-// voice activity while a second face is in view (see cameraWatch's "talking" check, never
-// recorded), and - independently of the camera - whether sound from outside the exam has been
-// going on long enough to be worth a clip for staff to listen to themselves.
+// mic level: talking (for cameraWatch, never recorded) and background noise clips
 
 import { useEffect, useRef, useState } from "react";
 
 export type MicEventKind = "mic_on" | "mic_off" | "mic_failed" | "background_noise";
 
-/** How loud the waveform's deviation from silence needs to be (0-128 scale) to count as someone
- * speaking rather than room/fan noise - a rough, uncalibrated cutoff, which is why the judge in
- * cameraWatch.ts also requires several ticks of this in a row before it means anything. */
+/** 0-128, rough cutoff */
 const VOICE_THRESHOLD = 25;
-/** Same idea for the noise watch below, but lower: "constant sound from outside the exam" (through
- * a door, from another room) reaches the mic fainter than someone talking straight into it, which
- * is what VOICE_THRESHOLD is actually tuned for. */
+/** lower than voice, noise from another room is quieter */
 const NOISE_THRESHOLD = 15;
 
-// Sampled on its own timer rather than piggybacking on cameraWatch's tick, so this keeps running
-// even with the camera off or between its looks.
+// own timer so it works with the camera off
 const NOISE_TICK_MS = 500;
 /** How much recent history the noise watch looks back over, in ticks - 8 seconds. */
 const NOISE_WINDOW_TICKS = 16;
-/** Share of that window that has to be over NOISE_THRESHOLD before it counts as "constant" rather
- * than a cough, a door, or a word or two. Deliberately not "every single tick": real speech and
- * ambient noise both have brief gaps (breaths, pauses between words) that a strict run-of-ticks
- * check would reset on every time, making it effectively never fire for anything but an unbroken
- * tone - 60% tolerates that natural on/off pattern while still ignoring one-off blips. */
+/** 60% of the window, real noise has gaps */
 const NOISE_REQUIRED_RATIO = 0.6;
-/** How long a clip to record once that holds, in ms. Not a rolling buffer: recording only starts
- * once the threshold is crossed, so the lead-in before that moment isn't in the clip. */
+/** ms, starts after the threshold is hit */
 const CLIP_MS = 5_000;
-/** Minimum gap between clips while the noise just keeps going, so one noisy stretch sends one
- * clip rather than one every time the window stays over the ratio. */
+/** one clip per noisy stretch */
 const CLIP_COOLDOWN_MS = 30_000;
 
 const rms = (data: Uint8Array): number => {
@@ -43,8 +29,7 @@ const rms = (data: Uint8Array): number => {
   return Math.sqrt(sumSquares / data.length);
 };
 
-// btoa needs a plain string, and spreading a whole clip's bytes into String.fromCharCode at once
-// risks a call-stack overflow - built up a chunk at a time instead.
+// in chunks, spreading the whole thing can overflow the stack
 const BASE64_CHUNK = 0x8000;
 const toBase64 = (bytes: Uint8Array): string => {
   let binary = "";
@@ -66,8 +51,7 @@ export function useMicrophone(onEvent: (kind: MicEventKind, detail: string, data
     const node = analyser.current;
     const data = buffer.current;
     if (!node || !data) return 0;
-    // TS's dom lib types this as Uint8Array<ArrayBuffer> specifically; `data` always is one
-    // (constructed with a plain length, never over a SharedArrayBuffer), just not inferred as such
+    // it's always a plain ArrayBuffer here
     node.getByteTimeDomainData(data as Uint8Array<ArrayBuffer>);
     return rms(data);
   };
@@ -87,8 +71,7 @@ export function useMicrophone(onEvent: (kind: MicEventKind, detail: string, data
       report.current("mic_failed", `The microphone isn't available: ${reason}`);
     };
 
-    // One clip, from right now - not a reason to hold up the exam if MediaRecorder has nothing
-    // for this stream, so a failure here is swallowed, same as a broken camera check would be.
+    // best-effort
     const recordClip = () => {
       if (!stream || recording || typeof MediaRecorder === "undefined") return;
       let recorder: MediaRecorder;
@@ -160,8 +143,7 @@ export function useMicrophone(onEvent: (kind: MicEventKind, detail: string, data
     };
   }, []);
 
-  /** Whether there's voice-level sound right now; false until the microphone is ready or if it
-   * never became available - never a reason to hold up the exam. */
+  /** false until the mic is ready */
   const isSpeaking = (): boolean => level() > VOICE_THRESHOLD;
 
   return { problem, isSpeaking };

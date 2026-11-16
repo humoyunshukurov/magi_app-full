@@ -6,8 +6,7 @@ const NOISE_TICK_MS = 500;
 const NOISE_WINDOW_TICKS = 16;
 const CLIP_COOLDOWN_MS = 30_000;
 
-// driven by the test: every getByteTimeDomainData call fills the buffer from this level, where
-// 0 is silence and 40 is comfortably over both VOICE_THRESHOLD (25) and NOISE_THRESHOLD (15)
+// 0 = silence, 40 is over both thresholds
 let level = 0;
 
 class FakeAnalyser {
@@ -50,8 +49,7 @@ class FakeMediaRecorder {
   }
 }
 
-// jsdom's own Blob has no arrayBuffer() (real browsers do) - stand in with one that does, same
-// idea as the AudioContext/MediaRecorder stubs above.
+// jsdom Blob has no arrayBuffer()
 class FakeBlob {
   type: string;
   size: number;

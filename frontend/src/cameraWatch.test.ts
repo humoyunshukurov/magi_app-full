@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWAY_MS, createJudge, headTurned, type Look } from "./cameraWatch";
 
-// BlazeFace's keypoint order: [right eye, left eye, nose tip, mouth, right ear, left ear] - only
-// the first three matter here, the rest can be anything.
+// blazeface keypoints: right eye, left eye, nose, mouth, right ear, left ear
 const keypoints = (rightEyeX: number, leftEyeX: number, noseX: number) => [
   { x: rightEyeX, y: 0.4 },
   { x: leftEyeX, y: 0.4 },
@@ -208,8 +207,7 @@ describe("createJudge, an extra person", () => {
   });
 });
 
-// a second face on its own already reports extra_person (see above) - these only care whether
-// "talking" specifically shows up alongside it, not the full verdict list for a given look
+// only checking that talking shows up too
 const talks = (verdicts: { kind: string }[]) => verdicts.some((v) => v.kind === "talking");
 
 describe("createJudge, talking", () => {

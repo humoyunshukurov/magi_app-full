@@ -62,8 +62,7 @@ const dataOf = (event: { data: string } | undefined) => JSON.parse(event?.data ?
 const flush = () => act(async () => { await vi.advanceTimersByTimeAsync(0); });
 const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 
-// There's no `.value`/`.selectionStart` on a contenteditable div the way there was on the old
-// `<textarea>`, so AnswerSheet stashes its live Tiptap editor on the element itself for tests.
+// AnswerSheet puts its tiptap editor on the element for tests
 function editorOf(box: HTMLElement) {
   return (box as unknown as { __editor: { commands: { insertContent: (t: string) => void; setTextSelection: (r: { from: number; to: number }) => void } } }).__editor;
 }
@@ -89,7 +88,7 @@ const oneScreen = { monitor_count: 1, extra_screens_allowed: false, forbidden_ap
 const link: { focus?: (focused: boolean) => void; closed?: () => void; blocked?: (url: string) => void; closeAttempt?: () => void } = {};
 const win: { focusChanged?: (focused: boolean) => void } = {};
 
-/** The exam window gaining or losing OS focus - the native event `useExamGuard` listens to now, not DOM blur/focus. */
+/** os window focus, what useExamGuard listens to */
 const blur = () => act(() => win.focusChanged?.(false));
 const focusWindow = () => act(() => win.focusChanged?.(true));
 
@@ -476,9 +475,7 @@ describe("AttemptSession", () => {
       type(box, "my own words");
       vi.spyOn(window, "getSelection").mockReturnValue({ toString: () => "own" } as Selection);
 
-      // ProseMirror's own clipboard handling prevents the raw cut/paste event itself (it
-      // does its own serialization instead), so the return value here isn't a signal of
-      // anything — what matters is that our guard doesn't ALSO block it, i.e. nothing logged.
+      // prosemirror handles the paste itself, we only check our guard logged nothing
       fireEvent.cut(box);
       fireEvent.paste(box, { clipboardData: { getData: () => "own" } });
       expect(logged("paste")).toHaveLength(0);
@@ -588,8 +585,7 @@ describe("AttemptSession", () => {
     });
 
     it("records a manual submit, with the last question summed up first", async () => {
-      // a single question, so it's the last one already - no navigating away from another
-      // question first, which would add its own summary on top of the one this test checks for
+      // single question so there's only one summary
       const single = { ...attempt(), questions: [question({ question_id: 1, position: 1, title: "Essay", question: "Explain.", question_type: "essay" })] };
       renderSession(single);
       await flush();

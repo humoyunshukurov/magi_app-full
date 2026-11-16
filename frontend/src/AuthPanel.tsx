@@ -1,9 +1,4 @@
-// Student-facing UI over the magi-server API client (api.ts) - login/signup, the exam list,
-// and taking one attempt through to a graded result. Same visual language as the MAGI web
-// frontend (magi_ap_test: glass-card, the magi-* palette, Outfit type, AnimatedButton) so the
-// desktop app and the web app read as one product; adapted, not copied - that frontend logs in
-// via an httpOnly cookie (ADR-0004 chose bearer tokens for this client instead), and its
-// dashboard/assignment pages are pre-pivot mock content with no real API behind them.
+// login, the exam list, and running one attempt (bearer token, see ADR-0004)
 
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,9 +26,7 @@ interface Session {
   user: UserSummary;
 }
 
-// Persisted so a returning user isn't asked for their password every time the app opens -
-// the token itself is what's authoritative (server-side TTL), this is just where it lives
-// between sessions.
+// so they don't have to log in every time
 const SESSION_KEY = "magi_session";
 
 function loadStoredSession(): Session | null {
@@ -140,8 +133,6 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
     setPassword("123456");
   };
 
-  // Switching forms must not drag the old one's banner along - a wrong-password error from
-  // login has no business still showing once the student has moved on to creating an account.
   function switchMode(next: "login" | "signup") {
     setMode(next);
     setError(null);
@@ -275,12 +266,8 @@ function ExamAction({
   );
 }
 
-// The app only ever shows what a student can act on right now - anything else (upcoming,
-// submitted, graded) is history/schedule, which belongs on the web, not here. An attempt already
-// in progress is always actionable: nothing closes it on its own anymore, deadline or not.
-// STARTABLE_EXAM_STATUSES in the backend's own attempt.service.ts is the source of truth for which
-// statuses POST /api/assignments will actually accept - "scheduled" belongs here too (it's the
-// normal status of an exam nobody has manually pushed to "ongoing"), not just "ongoing"/"demo".
+// only what can be started/resumed right now, the rest is on the web.
+// statuses must match STARTABLE_EXAM_STATUSES in the backend
 const STARTABLE_STATUSES = new Set(["scheduled", "ongoing", "demo"]);
 function isActionable(exam: ExamSummary): boolean {
   if (exam.attempt_status === "in_progress") return true;
@@ -290,8 +277,7 @@ function isActionable(exam: ExamSummary): boolean {
   return now >= new Date(exam.scheduled_start).getTime() && now < new Date(exam.scheduled_end).getTime();
 }
 
-// Newest-created first - id order is a more reliable "newest" signal than scheduled_start, which
-// a professor can set to anything regardless of when the exam was actually created.
+// newest first by id (scheduled_start can be anything)
 const STATUS_RANK: Record<ExamSummary["status"], number> = {
   ongoing: 0,
   demo: 0,
@@ -355,8 +341,6 @@ function ExamList({
   );
 }
 
-// A simple "1h 20m"/"5m" duration, same light-touch style the old countdown used - not every
-// unit needs full localization to be readable.
 function formatLate(seconds: number): string {
   const totalMinutes = Math.max(1, Math.round(seconds / 60));
   const hours = Math.floor(totalMinutes / 60);
@@ -367,9 +351,7 @@ function formatLate(seconds: number): string {
 function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "left_window" }) {
   const { t } = useTranslation();
   const lateNote = result.late_seconds > 0 ? t("authPanel.lateBy", { time: formatLate(result.late_seconds) }) : null;
-  // Written answers can't be graded on submit, so a submitted attempt has no score yet. Nothing
-  // closes an attempt by itself anymore but leaving the exam window - auto_submitted itself is
-  // always false on a fresh submission now, so reason (set client-side) is the real signal here.
+  // auto_submitted is always false now, reason is what tells us they left the window
   if (result.status !== "graded") {
     const message = reason === "left_window" ? t("authPanel.leftWindowSubmitted") : t("authPanel.answersSubmitted");
     return (
@@ -421,8 +403,7 @@ export function AuthPanel({
     onSessionChange?.(session ? { user: session.user, token: session.token } : null);
   }, [session, onSessionChange]);
 
-  // A magi://launch?examId=… deep link names an exam to jump straight to - held here until a
-  // session and the exam list are both ready, since the link can arrive before either is.
+  // magi://launch?examId=... can arrive before login
   useEffect(() => {
     const unlisten = listen(LAUNCH_EVENT, (event) => {
       const parsed = launchPayloadSchema.safeParse(event.payload);
@@ -433,9 +414,7 @@ export function AuthPanel({
     };
   }, []);
 
-  // Once there's a session and the exam list to check it against, send the student straight into
-  // that exam's own Start flow - same path as pressing Start themselves, checks and all. An exam
-  // that's already submitted or graded has nothing left to start, so this just drops the request.
+  // same path as pressing Start
   useEffect(() => {
     if (pendingExamId === null || !session || !exams || attempt || checking) return;
     const target = exams.find((e) => e.id === pendingExamId);
@@ -450,8 +429,6 @@ export function AuthPanel({
     onExamRunning?.(attempt !== null || checking !== null);
   }, [attempt, checking, onExamRunning]);
 
-  // On launch, try the token that's already on disk before asking for a password again -
-  // `me` both validates it and refreshes the user record in one round trip.
   useEffect(() => {
     const stored = loadStoredSession();
     if (!stored) {
@@ -462,9 +439,7 @@ export function AuthPanel({
       .then(async (user) => {
         const restored = { token: stored.token, user };
         setSession(restored);
-        // Caught right here, not left to fall into the catch below: a failure fetching exams
-        // is not "the token is no good" and must not log the student back out over it, but it
-        // still has to be shown - otherwise exams stays null, which renders as an empty list.
+        // failing to load exams isn't a bad token, don't log them out over it
         try {
           setExams(await listExams(restored.token));
         } catch (err) {
@@ -472,8 +447,7 @@ export function AuthPanel({
         }
       })
       .catch((err) => {
-        // Only a genuine "that token is no good" answer should force a re-login - if the
-        // server just wasn't reachable (e.g. mid-restart), keep the token for next time.
+        // only log out on a real auth error, not when the server is down
         if (err instanceof ApiError && err.kind === "response") storeSession(null);
       })
       .finally(() => setRestoringSession(false));
@@ -482,9 +456,7 @@ export function AuthPanel({
   async function onSignedIn(newSession: Session) {
     setSession(newSession);
     storeSession(newSession);
-    // A failure here must not vanish silently: without this, exams stays null, which the list
-    // below renders as an empty "[]" - the student would see "No exams assigned yet." with no
-    // hint that anything actually went wrong.
+    // otherwise it just looks like "no exams"
     try {
       setExams(await listExams(newSession.token));
     } catch (err) {
@@ -506,8 +478,7 @@ export function AuthPanel({
   async function reloadExams() {
     if (!session) return;
     setReloading(true);
-    // A local reload can finish in a few ms - too fast to see spin, which reads as "did
-    // nothing". Keep the spinner up for at least this long so the click is visibly answered.
+    // min spinner time so the click looks like it did something
     const minSpin = new Promise((resolve) => setTimeout(resolve, 400));
     try {
       const [fresh] = await Promise.all([listExams(session.token), minSpin]);
@@ -530,8 +501,7 @@ export function AuthPanel({
     if (!session) return;
     setChecking(null);
     setStartingId(examId);
-    // Lock the window the instant Start is pressed, not once the attempt has round-tripped to
-    // the server - `useExamGuard` locks again once it mounts, which is a harmless no-op.
+    // lock right away, useExamGuard locking again is fine
     await examLock(true).catch(() => undefined);
     try {
       setAttempt(await startAttempt(session.token, examId));
@@ -566,9 +536,7 @@ export function AuthPanel({
           </h2>
           <p className="text-xs text-magi-secondary">{session.user.email}</p>
         </div>
-        {/* Hidden once the exam is locked - a click here would silently end the attempt with
-            none of the violation logging that leaving the window or closing the app gets,
-            defeating the whole "you can't get out of this" warning the student was just shown. */}
+        {/* hidden while locked - logging out would skip the violation logging */}
         {!checking && !attempt && (
           <button onClick={() => void onLogout()} className="text-sm text-magi-secondary hover:text-magi-primary transition-colors">
             {t("authPanel.logOut")}

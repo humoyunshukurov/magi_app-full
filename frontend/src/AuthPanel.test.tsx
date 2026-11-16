@@ -1,6 +1,4 @@
-// Drives the whole student flow through the actual rendered UI (login -> exam list -> start
-// attempt -> answer -> submit -> graded result), against a mocked fetch queue shaped exactly
-// like magi-server's real responses. This is what stands in for a browser here.
+// whole student flow through the real UI against a mocked fetch queue
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -50,8 +48,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-// ongoing and inside its window relative to whenever the test actually runs, since the app only
-// ever shows an exam it's actionable right now - see isActionable in AuthPanel.tsx
+// window around now, otherwise isActionable hides it
 const NOW = Date.now();
 const exam = {
   id: 15, name: "Test Exam", kind: "exam",
@@ -302,7 +299,6 @@ describe("AuthPanel", () => {
       signIn();
 
       await screen.findByText("exams unavailable");
-      // not mistaken for the real "nothing assigned" state - the signed-in header is there, this is a failure banner on top of it
       expect(screen.getByText("No exams assigned yet.")).toBeTruthy();
     });
 
@@ -392,8 +388,7 @@ describe("AuthPanel", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Start" }));
       await screen.findByText("photos: true");
-      // a click here would silently end a locked, full-screen attempt with none of the
-      // violation logging that actually leaving the window gets - it must not be reachable
+      // logging out here would end the locked exam without any logging
       expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
 
       fireEvent.click(await screen.findByRole("button", { name: "Begin" }));
@@ -439,8 +434,7 @@ describe("AuthPanel", () => {
     });
 
     it("does nothing for an exam that's already graded", async () => {
-      // a graded exam is hidden from the app's own list entirely, but the deep link still names
-      // its id directly - it must still do nothing once that exam turns up already done
+      // hidden from the list, but the deep link still names it
       queueFetch([loginResponse, { status: 200, body: { success: true, exams: [{ ...exam, attempt_status: "graded" }] } }]);
       render(<AuthPanel />);
       signIn();

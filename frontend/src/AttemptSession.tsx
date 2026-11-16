@@ -1,6 +1,4 @@
-// The exam screen: one question at a time, answers kept in the encrypted local store on every
-// keystroke and pushed to the server after a pause, a countdown that submits by itself when it
-// reaches zero.
+// the exam screen. answers are saved locally on every keystroke and synced after a pause
 
 import { useEffect, useReducer, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -57,8 +55,7 @@ function toBase64(bytes: Uint8Array): string {
 
 const fileNameOf = (path: string) => path.split(/[\\/]/).pop() ?? path;
 const UNIT_SECONDS: Record<TimeUnit, number> = { seconds: 1, minutes: 60, hours: 3600, days: 86400 };
-// a submit that actually reached the server leaves the attempt in one of these - used to tell a
-// genuinely-failed submit apart from one whose response was merely lost in transit
+// to tell a failed submit from a lost response
 const DONE_STATUSES = new Set<AttemptSummary["status"]>(["submitted", "auto_submitted", "graded"]);
 
 interface QuestionState {
@@ -145,14 +142,12 @@ export function AttemptSession({
   const { t } = useTranslation();
   const questions = [...attempt.questions].sort((a, b) => a.position - b.position);
 
-  // Answers live in a ref so timers and event handlers always see the latest, and the screen
-  // re-renders explicitly after each change.
+  // in a ref so timers see the latest
   const store = useRef<Record<number, QuestionState>>({});
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   const [ready, setReady] = useState(false);
   const [index, setIndex] = useState(0);
-  // signed: remaining_seconds and late_seconds are never both nonzero, so this is exactly how far
-  // from the deadline the attempt is right now - negative once it's running late
+  // negative when late
   const initialRemaining = attempt.remaining_seconds - attempt.late_seconds;
   const [remaining, setRemaining] = useState(initialRemaining);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "failed">("idle");
@@ -169,8 +164,7 @@ export function AttemptSession({
   const finished = useRef(false);
   const syncFailing = useRef(false);
 
-  // Characters typed so far, sampled every few seconds across the whole attempt (not per
-  // question) - a coarse WPM-over-time chart for staff, not anything read live during the exam.
+  // chars typed over time, for the wpm chart
   const timeline = useRef<{ t: number; chars: number }[]>([]);
   const timelineStart = useRef(Date.now());
   const lastSampleAt = useRef(0);
@@ -339,8 +333,7 @@ export function AttemptSession({
     onFinished(result, reason);
   };
 
-  // auto is only ever true for leaving the exam window now - nothing closes an attempt on its
-  // own just because its deadline passed, so "timeout" isn't a reason this can happen anymore
+  // auto = left the window
   const submit = async (auto: boolean) => {
     if (finished.current || submitInFlight.current) return;
     submitInFlight.current = true;
@@ -377,12 +370,7 @@ export function AttemptSession({
       logSubmitted();
       finish(result, auto ? "left_window" : undefined);
     } catch (err) {
-      // The submit may have actually gone through server-side even though this response was
-      // lost (network blip, timeout, the app losing focus mid-request) - check the real state
-      // before telling the student it failed and leaving them stuck in the locked exam window
-      // with a submit that already succeeded. Only trust it as done if the server agrees the
-      // attempt is no longer open - an attempt still genuinely in progress must not be ended
-      // client-side just because this one request failed.
+      // the submit may have gone through and only the response got lost - check before showing an error
       try {
         const result = await getAttempt(token, attempt.id);
         if (DONE_STATUSES.has(result.status)) {
@@ -446,11 +434,9 @@ export function AttemptSession({
   useEffect(() => {
     const id = setInterval(() => {
       sampleTimeline();
-      // a professor-granted retake (unlimited_time) never has a clock to run out - no point
-      // computing a countdown that would just overflow formatClock's mm:ss into giant numbers
+      // retake, no clock
       if (attempt.unlimited_time) return;
-      // never clamped to 0 here: once it goes negative the attempt is just running late, not
-      // closed - nothing submits it but the student's own click, however long that takes
+      // can go negative, it just means late
       setRemaining(Math.ceil((deadline.current - Date.now()) / 1000));
     }, 1000);
     return () => clearInterval(id);
@@ -481,8 +467,6 @@ export function AttemptSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, index]);
 
-  // Holds back copying, pasting and the developer tools, and watches the window, the screens,
-  // the apps and the permitted links.
   const guard = useExamGuard({
     enabled: ready,
     log,
@@ -558,8 +542,7 @@ export function AttemptSession({
               {formatClock(remaining)}
             </span>
           ) : (
-            // the deadline passed, but nothing closes the attempt by itself - this just counts
-            // up how late the student is running, same slot the countdown used
+            // past the deadline - count up instead
             <span
               role="timer"
               className="px-2.5 py-1 rounded-lg bg-magi-destructive/10 border border-magi-destructive text-xs font-bold text-magi-destructive tabular-nums"

@@ -1,5 +1,4 @@
-// What the student did during an attempt, written to the encrypted local log and synced to the
-// server as proctoring violations/snapshots where relevant - staff review it there, not in this app.
+// activity log - local encrypted log, some kinds are also synced to the server
 
 import type { ActivityEvent } from "./generated/ActivityEvent";
 import { activityLog } from "./ipc";
@@ -53,8 +52,7 @@ export interface ActivityContext {
   examName: string;
 }
 
-// local-only kinds that double as a proctoring violation: synced to the server too, so staff
-// can see them without the student's own machine (the rest only ever goes to the local log)
+// these also go to the server
 const CHEATING_KIND: Partial<Record<ActivityKind, CheatingType>> = {
   paste: "copy_paste",
   window_left: "tab_switch_limit",
@@ -77,8 +75,7 @@ const PHOTO_KIND = new Set<ActivityKind>(["phone_seen", "camera_away", "extra_pe
 // kinds whose `data.audio` is a recorded clip worth keeping on the server too
 const AUDIO_KIND = new Set<ActivityKind>(["background_noise"]);
 
-// a proctoring sync (cheating report, snapshot upload) is worth one retry after a transient
-// network blip before giving up - still fire-and-forget from the caller's point of view
+// one retry for network blips
 function syncOnce<T>(label: string, run: () => Promise<T>) {
   run().catch((err) => {
     console.error(`${label} failed, retrying once:`, err);
@@ -86,8 +83,7 @@ function syncOnce<T>(label: string, run: () => Promise<T>) {
   });
 }
 
-/** Records one entry. A failing local store (or a failed server sync) never gets in the way of
- * the exam - but every failure is at least logged, instead of disappearing silently. */
+/** never blocks the exam, but failures get logged */
 export function logActivity(
   ctx: ActivityContext,
   kind: ActivityKind,

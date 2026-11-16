@@ -10,18 +10,8 @@ import Strike from "@tiptap/extension-strike";
 import { TextStyleKit } from "@tiptap/extension-text-style";
 import { applyInput, type TypingMetrics } from "./typingMetrics";
 
-// The white sheet a text answer is written on, styled and driven like a plain word processor:
-// a toolbar for the formatting everyone actually uses (headings, bold/italic/underline/strike,
-// font size, lists, alignment, undo/redo), a page-like editable area below it. Every edit is
-// folded into the typing counters on the editor's own `beforeinput` (fired before the change
-// lands, so the selection is still the one the edit acts on) — same event this component used
-// when the answer was a plain `<textarea>`, just now read off the document's own position/size
-// instead of a string's.
-//
-// Formatting only ever happens from a deliberate click or a real shortcut (Ctrl+B and the like),
-// never from typing ordinary punctuation: the marks/nodes below that normally auto-convert
-// markdown as you type (`**bold**`, `# heading`, …) have that switched off, so nothing about an
-// exam answer's formatting changes behind the student's back.
+// word-processor style editor for text answers. typing counters are taken on beforeinput.
+// markdown shortcuts are turned off so formatting never changes by itself
 const NoSurpriseHeading = Heading.extend({ addInputRules: () => [] });
 const NoSurpriseBold = Bold.extend({ addInputRules: () => [] });
 const NoSurpriseItalic = Italic.extend({ addInputRules: () => [] });
@@ -75,8 +65,7 @@ function ToolbarSelect({ label, value, onChange, children }: { label: string; va
 
 const ToolbarDivider = () => <span className="w-px h-5 bg-magi-border mx-1 shrink-0" aria-hidden="true" />;
 
-// Plain, recognizable pictograms instead of arrows/letters for the actions where a real icon
-// reads faster than text — this app has no icon library, so these are hand-drawn, not imported.
+// no icon library, drawn by hand
 const AlignLeftIcon = () => (
   <svg width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
     <path d="M1 1h16M1 5h10M1 9h16M1 13h10" />
@@ -166,16 +155,12 @@ export function AnswerSheet({
         TextAlign.configure({ types: ["paragraph", "heading"] }),
         TextStyleKit.configure({ backgroundColor: false, color: false, fontFamily: false, lineHeight: false }),
       ],
-      // Read once: this question's answer is fixed by the time it first mounts (the exam
-      // waits for the server/local drafts before rendering any question at all), and after
-      // that this editor is the only writer of its own content.
+      // read once, this editor owns the content after that
       content: value,
       onUpdate: ({ editor }) => onChangeRef.current(editor.isEmpty ? "" : editor.getHTML(), counters.current),
       editorProps: {
         attributes: {
           "aria-label": label,
-          // Short-answer questions get the same generous page as an essay - a real document
-          // page doesn't shrink depending on how much a question expects you to write.
           class: "outline-none leading-relaxed text-base min-h-[85vh] p-16",
         },
       },
@@ -183,19 +168,12 @@ export function AnswerSheet({
     [],
   );
 
-  // Everything the student does inside the answer — typing, pasting, deleting, undo/redo —
-  // fires a real `beforeinput` on the editable region, contenteditable included, before it
-  // lands. Same counting as the plain textarea this replaced.
   useEffect(() => {
     if (!editor) return;
     const el = editor.view.dom;
-    // Tests reach the live editor through this (there's no `.value`/`.selectionStart` on a
-    // contenteditable div to drive from the outside, the way there was for a `<textarea>`).
+    // for tests - a contenteditable has no .value
     (el as unknown as { __editor: typeof editor }).__editor = editor;
-    // `applyInput` was written for a `<textarea>`'s linear string, so it's given plain-text
-    // character offsets here too — not the document's own node positions, which count each
-    // paragraph/list boundary as an extra position and would make an empty document look like
-    // it already has text at position 1.
+    // plain text offsets, not prosemirror positions
     const textOffset = (pos: number) => editor.state.doc.textBetween(0, pos, "\n", "\n").length;
     const onBeforeInput = (e: Event) => {
       const event = e as InputEvent;
@@ -250,9 +228,7 @@ export function AnswerSheet({
 
   return (
     <div className="w-full">
-      {/* The ribbon stays at the top, full width, and sticks there while a long answer scrolls.
-          The page floats below it on its own gray "desk", with a real gap above it — not glued
-          to the ribbon the way an earlier version had it — the way a real word processor looks. */}
+      {/* sticky toolbar, page below it */}
       <div role="toolbar" aria-label={t("answerSheet.formatting")} className="sticky top-0 z-10 flex flex-col gap-1.5 px-3 py-2 bg-magi-surface border-b border-magi-border shadow-sm">
         {/* Text: what the letters themselves look like. */}
         <div className="flex flex-wrap items-center gap-1">

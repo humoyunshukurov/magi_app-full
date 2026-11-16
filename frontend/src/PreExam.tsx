@@ -1,6 +1,4 @@
-// What happens between pressing Start and the exam opening: the computer is checked (one screen,
-// no remote control or screen sharing apps), then the student types their ID number and the
-// camera takes one photo of them with their ID card. The exam clock only starts after this.
+// before the exam: environment check, then ID number + photo. clock starts after this
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,8 +11,7 @@ import { inputClass, primaryButtonClass } from "./ui";
 import { CameraPicture, useCamera } from "./useCamera";
 import { isUpdating } from "./updateState";
 
-// mirrors environment.rs's FORBIDDEN_PREFIXES/FORBIDDEN_EXACT - what each one actually does,
-// so the student knows why it blocks the exam instead of just that it does
+// same list as environment.rs, with a reason for each
 const APP_REASON_KEYS: Record<string, string> = {
   teamviewer: "preExam.appReasons.remoteControl",
   anydesk: "preExam.appReasons.remoteControl",
@@ -152,12 +149,9 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
   const [noFace, setNoFace] = useState(false);
   const [idMismatch, setIdMismatch] = useState(false);
   const detector = useRef<Awaited<ReturnType<typeof loadDetector>> | null>(null);
-  // undefined: not loaded yet. null: loaded, but this account has no ID number assigned - the
-  // check below is skipped rather than locking out an account from before this existed.
+  // undefined = loading, null = no ID number on this account (skip the check)
   const realIdNumber = useRef<string | null | undefined>(undefined);
-  // the Start button used to only gate on the camera/screen checks, so typing fast enough could
-  // press it before this fetch resolved - realIdNumber.current was still undefined (falsy), and
-  // any ID number typed in sailed right through the check below unmatched
+  // wait for it, otherwise a fast click skipped the check
   const [idNumberLoaded, setIdNumberLoaded] = useState(false);
 
   useEffect(() => {
@@ -177,9 +171,7 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
     };
   }, [token]);
 
-  // While the student types, the screen is tried once and the picture thrown away: on some systems
-  // the computer asks for permission to take screenshots, which is better settled now than in the
-  // middle of the exam.
+  // take one screenshot now so the os permission prompt shows up here and not mid-exam
   useEffect(() => {
     let cancelled = false;
     screenshotTake()
@@ -194,8 +186,6 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
     };
   }, []);
 
-  // Loaded ahead of time so it's ready the moment the photo is taken, same model the exam's own
-  // camera watch uses - a face check this cheap shouldn't need a server round trip.
   useEffect(() => {
     let cancelled = false;
     loadDetector().then(
@@ -210,8 +200,7 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
   }, []);
 
   const id = idNumber.trim();
-  // The reference photo check only runs when a photo was actually captured - no camera means
-  // nothing to compare, and that path already proceeds (and is logged) on its own above.
+  // no camera = nothing to compare
   const start = async () => {
     setIdMismatch(false);
     if (realIdNumber.current && id.toLowerCase() !== realIdNumber.current.trim().toLowerCase()) {
@@ -238,8 +227,7 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
       const check = await checkIdentity(token, photo.dataUrl);
       matched = !check.hasReference || check.matched;
     } catch (err) {
-      // a broken check must not lock a student out of an exam they're entitled to take - let
-      // them in, but note it so staff can see the identity check never actually ran
+      // don't lock them out if the check itself breaks, just note it
       notes.current.push({ kind: "identity_check_failed", detail: `Could not verify your photo: ${String(err)}` });
     }
     setVerifying(false);

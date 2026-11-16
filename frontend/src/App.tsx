@@ -40,11 +40,8 @@ export function App() {
   const { t } = useTranslation();
   const [examRunning, setExamRunning] = useState(false);
 
-  // ADR-0008: checked once per launch. The download runs in the background rather than blocking
-  // this effect's caller, so PreExam's environment check holds the exam back with setUpdating
-  // until it's done - otherwise a student could start an exam mid-download and get pulled into a
-  // relaunch partway through it. Windows exits the app itself after installing; macOS/Linux need
-  // the explicit relaunch below.
+  // ADR-0008: check once per launch, PreExam waits while it downloads.
+  // windows quits by itself after installing, mac/linux need relaunch()
   useEffect(() => {
     (async () => {
       try {
@@ -62,8 +59,7 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-magi-white text-magi-primary flex flex-col">
-      {/* An open exam gets the whole window, the way a document fills a word processor - no
-          branding bar competing with it for space. */}
+      {/* no header/footer during an exam */}
       <header hidden={examRunning} className="sticky top-0 z-50 bg-magi-white border-b border-magi-border">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <span className="font-outfit font-extrabold text-lg tracking-tight">{t("app.title")}</span>

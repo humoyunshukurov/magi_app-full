@@ -1,22 +1,14 @@
-// Watches the camera picture while an exam is open and reports a phone in view, nobody in front
-// of the camera, or a second face in it, with a photo taken at that moment.
-
 import { useEffect, useRef } from "react";
 import { createJudge, loadDetector } from "./cameraWatch";
 
 export type WatchEventKind = "phone_seen" | "camera_away" | "camera_back" | "camera_checks_off" | "extra_person" | "talking" | "looking_away";
 type Picture = HTMLVideoElement | HTMLImageElement;
 
-// Halved from 1000ms: a person walking past in the background, or stepping up beside the
-// student, can cross the frame in well under a second - sampling twice as often catches far more
-// of those than the face model's own miss rate alone would explain.
+// 500ms, someone walking past can cross the frame in under a second
 export const TICK_MS = 500;
-// Looking for a phone is the slow part, so it happens less often than every look - kept at the
-// same real-world cadence as before (every 2s) despite the faster tick, by doubling the stride.
+// phone check still every 2s
 const PHONE_EVERY = 4;
-/** Photos are kept on this computer, so there is a cap per exam - per event kind, so a run of
- * camera_away/extra_person events (an easily-flaked face read) can't use up the budget a genuine
- * phone_seen later in the exam would otherwise get. */
+/** per kind, so camera_away noise can't use up phone_seen's photos */
 export const PHOTO_LIMIT = 20;
 const MAX_SIDE = 640;
 
@@ -48,8 +40,7 @@ export function useCameraWatch(
     const judge = createJudge();
     let looks = 0;
     const photosByKind: Partial<Record<WatchEventKind, number>> = {};
-    // a single bad frame (canvas not ready yet, a transient model hiccup) must not end watching
-    // for the rest of the exam - note it once, but keep ticking either way
+    // one bad frame shouldn't stop watching
     let reportedBrokenCheck = false;
 
     const tick = () => {

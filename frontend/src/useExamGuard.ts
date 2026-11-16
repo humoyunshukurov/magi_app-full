@@ -1,6 +1,4 @@
-// What the exam keeps an eye on and holds back while it is open: copying and pasting, the
-// developer tools, leaving the window, extra screens, forbidden apps and browsers, and the
-// permitted links. Everything that matters is written to the Activity log.
+// copy/paste, devtools, leaving the window, extra screens, forbidden apps, permitted links
 
 import { useCallback, useEffect, useRef } from "react";
 import type { ActivityKind } from "./activity";
@@ -70,8 +68,7 @@ export function useExamGuard({
     }
   });
 
-  // Copying and pasting inside the exam is fine; text that comes from outside it is held back, as
-  // are the developer tools, and each try is written down.
+  // paste from inside the exam is fine, from outside is blocked
   useEffect(() => {
     if (!enabled) return;
     const note = (kind: ActivityKind, detail: string, data?: Record<string, unknown>) =>
@@ -156,8 +153,7 @@ export function useExamGuard({
     settleFocus.current = settle;
 
     const listening = Promise.all([
-      // The native window-focus event, not the webview's own `window.blur`/`focus` DOM events -
-      // those don't reliably reach the page on every platform (seen on this very app on Linux).
+      // native focus event, blur/focus didn't fire reliably on linux
       onWindowFocusChanged((focused) => {
         f.main = focused;
         settle();

@@ -75,8 +75,6 @@ describe("useCameraWatch", () => {
   });
 
   it("gives each event kind its own photo budget, so a flood of one kind can't starve another", async () => {
-    // faces=2 reports extra_person with a photo on the second look, then two faces=1 looks clear
-    // it so it can fire again - repeated one more time than the budget allows
     const extraPersonCycle: Look[] = [
       { faces: 2, phone: false, voice: null, turned: null, extraBody: null },
       { faces: 2, phone: false, voice: null, turned: null, extraBody: null },

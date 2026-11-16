@@ -22,8 +22,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// everything here is fire-and-forget by design (logActivity itself is synchronous) - flush the
-// microtask queue so the promises it kicked off get a chance to settle before assertions run
+// fire-and-forget, flush microtasks
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("logActivity", () => {

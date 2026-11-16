@@ -1,10 +1,9 @@
-// Counters behind an answer's typing record, folded from the browser's `beforeinput` events
-// (fired before the text changes, so the selection is still the one the edit acts on).
+// typing counters, from beforeinput
 
 export interface TypingMetrics {
   /** Characters typed. */
   typed: number;
-  /** Operations that changed already-written text: deletes, replacing a selection, inserting mid-text, undo/redo. */
+  /** deletes, replacing a selection, mid-text inserts, undo/redo */
   edited: number;
   /** Characters pasted (or dropped) in. */
   pasted: number;

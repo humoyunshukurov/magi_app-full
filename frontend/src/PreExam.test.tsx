@@ -49,11 +49,9 @@ beforeEach(() => {
     cameraEvent = onEvent;
     return camera();
   });
-  // no reference photo on file by default - the common case, and the one every pre-existing
-  // test below relies on to reach onReady without being about the identity check itself
+  // no reference photo by default
   vi.mocked(checkIdentity).mockResolvedValue({ success: true, hasReference: false, matched: true, outcome: "no_reference" });
-  // no ID number assigned by default - every pre-existing test types an arbitrary ID and relies
-  // on it going through unchecked, same as before this feature existed
+  // no ID number by default, so any typed one goes through
   vi.mocked(getMyIdNumber).mockResolvedValue(null);
   vi.mocked(isUpdating).mockReturnValue(false);
 });

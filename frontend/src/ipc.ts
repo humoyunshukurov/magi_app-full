@@ -1,6 +1,4 @@
-// Typed IPC boundary (ADR-0002). Every payload crossing Tauri IPC is validated at runtime
-// with zod, and each schema is tied to the Rust-generated type via `satisfies`, so drift
-// between `magi-types` and the frontend is a compile error.
+// tauri ipc, every payload checked with zod (ADR-0002)
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -85,10 +83,7 @@ export async function activityLog(event: ActivityEvent): Promise<void> {
   await invoke("activity_log", { event });
 }
 
-/**
- * Starts the camera. A name means the app itself is reading it and pushes the frames (Linux);
- * null means the webview can open the camera by itself.
- */
+/** name = app reads the camera and pushes frames (linux), null = webview opens it */
 export async function cameraStart(): Promise<string | null> {
   return z.string().nullable().parse(await invoke("camera_start"));
 }
@@ -134,7 +129,7 @@ export const onLinkFocus = (handler: (focused: boolean) => void) => listen<boole
 export const onLinkClosed = (handler: () => void) => listen("link-closed", () => handler());
 export const onLinkBlocked = (handler: (url: string) => void) => listen<string>("link-blocked", (e) => handler(e.payload));
 
-/** A picture of the whole screen, as a base64 JPEG. The first time, the desktop may ask the student to allow it. */
+/** base64 jpeg, may ask for permission the first time */
 export async function screenshotTake(): Promise<string> {
   return z.string().parse(await invoke("screenshot_take"));
 }
@@ -146,14 +141,9 @@ export async function appQuit(): Promise<void> {
 
 export const onCloseAttempt = (handler: () => void) => listen("close-attempt", () => handler());
 
-/**
- * Whether the exam window itself has OS focus - the native window event, not the webview's own
- * `window.blur`/`focus` DOM events, which don't reliably reach the page on every platform.
- */
+/** native window focus, the dom events aren't reliable on every platform */
 export const onWindowFocusChanged = (handler: (focused: boolean) => void) => {
-  // Unlike `invoke`/`listen`, `getCurrentWindow` throws synchronously (not a rejected promise)
-  // outside a real Tauri webview - caught here so callers can treat this like every other
-  // `on*` subscription above and just `.catch()` it.
+  // getCurrentWindow throws synchronously outside tauri
   try {
     return getCurrentWindow().onFocusChanged((e) => handler(e.payload));
   } catch (err) {

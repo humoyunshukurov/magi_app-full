@@ -1,5 +1,4 @@
-// Same tap-scale micro-interaction as the MAGI web frontend's AnimatedButton (magi_ap_test) -
-// no AnimatedLink here, since this app has no router to link between pages.
+// same tap animation as the web frontend
 
 import { motion, type HTMLMotionProps } from "framer-motion";
 import type { ReactNode } from "react";
