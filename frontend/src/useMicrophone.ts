@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 
 export type MicEventKind = "mic_on" | "mic_off" | "mic_failed" | "background_noise";
 
-/** 0-128, rough cutoff */
-const VOICE_THRESHOLD = 25;
+/** 0-128, normal speech at a laptop mic is roughly 4-15 */
+const VOICE_THRESHOLD = 10;
 /** lower than voice, noise from another room is quieter */
-const NOISE_THRESHOLD = 15;
+const NOISE_THRESHOLD = 5;
 
 // own timer so it works with the camera off
 const NOISE_TICK_MS = 500;
@@ -71,14 +71,17 @@ export function useMicrophone(onEvent: (kind: MicEventKind, detail: string, data
       report.current("mic_failed", `The microphone isn't available: ${reason}`);
     };
 
-    // best-effort
+    const NOISE_DETAIL = "Constant sound picked up from outside the exam";
+
+    // best-effort, without a recorder it's still reported, just with no clip
     const recordClip = () => {
-      if (!stream || recording || typeof MediaRecorder === "undefined") return;
+      if (!stream || recording) return;
+      if (typeof MediaRecorder === "undefined") return report.current("background_noise", NOISE_DETAIL);
       let recorder: MediaRecorder;
       try {
         recorder = new MediaRecorder(stream);
       } catch {
-        return;
+        return report.current("background_noise", NOISE_DETAIL);
       }
       recording = true;
       const chunks: BlobPart[] = [];
@@ -87,11 +90,11 @@ export function useMicrophone(onEvent: (kind: MicEventKind, detail: string, data
       };
       recorder.onstop = () => {
         recording = false;
-        if (!chunks.length) return;
+        if (!chunks.length) return report.current("background_noise", NOISE_DETAIL);
         const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
         void blob.arrayBuffer().then((buf) => {
           const audio = `data:${blob.type};base64,${toBase64(new Uint8Array(buf))}`;
-          report.current("background_noise", "Constant sound picked up from outside the exam", { audio });
+          report.current("background_noise", NOISE_DETAIL, { audio });
         });
       };
       recorder.start();
