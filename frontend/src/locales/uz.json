@@ -93,7 +93,9 @@
     "examsSubtitle": "Sizga biriktirilgan test va uyga vazifalar",
     "reload": "Yangilash",
     "reloadExams": "Imtihonlar ro'yxatini yangilash",
-    "accountsFromProfessor": "Hisobingizni o'qituvchingiz yaratadi."
+    "accountsFromProfessor": "Hisobingizni o'qituvchingiz yaratadi.",
+    "zeroedForLate": "O'qituvchingiz {{marked}}/{{max}} ball qo'ydi, lekin kech topshirganingiz uchun ball 0 ga tenglashtirildi.",
+    "overdue": "Muddat o'tgan: kech topshirilgan ish 0 ball oladi"
   },
   "preExam": {
     "beforeExamStarts": "Imtihon boshlanishidan oldin",

@@ -265,6 +265,24 @@ describe("AuthPanel", () => {
       },
     );
 
+    it("still lists an exam whose deadline passed, marked as late", async () => {
+      const overdue = { ...exam, scheduled_end: new Date(NOW - 60_000).toISOString(), scheduled_start: new Date(NOW - 120 * 60_000).toISOString() };
+      queueFetch([loginResponse, { status: 200, body: { success: true, exams: [overdue] } }]);
+      render(<AuthPanel />);
+      signIn();
+      await screen.findByText(/Test Exam/);
+      expect(screen.getByText("Deadline passed: late work scores 0")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+    });
+
+    it("hides an exam that has not opened yet", async () => {
+      const upcoming = { ...exam, scheduled_start: new Date(NOW + 60 * 60_000).toISOString(), scheduled_end: new Date(NOW + 120 * 60_000).toISOString() };
+      queueFetch([loginResponse, { status: 200, body: { success: true, exams: [upcoming] } }]);
+      render(<AuthPanel />);
+      signIn();
+      await screen.findByText("No exams assigned yet.");
+    });
+
     it("refreshes the list when starting fails, so a stale Start disappears once the exam is really done", async () => {
       queueFetch([
         loginResponse,

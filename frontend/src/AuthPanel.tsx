@@ -213,15 +213,15 @@ function ExamAction({
   );
 }
 
-// only what can be started/resumed right now, the rest is on the web.
+// what can be started/resumed now, the rest is on the web. past the end it can still be
+// taken, it just counts as late (the backend scores it 0)
 // statuses must match STARTABLE_EXAM_STATUSES in the backend
 const STARTABLE_STATUSES = new Set(["scheduled", "ongoing", "demo"]);
 function isActionable(exam: ExamSummary): boolean {
   if (exam.attempt_status === "in_progress") return true;
   if (exam.attempt_status) return false; // submitted/auto_submitted/graded - nothing left to do
   if (!STARTABLE_STATUSES.has(exam.status)) return false;
-  const now = Date.now();
-  return now >= new Date(exam.scheduled_start).getTime() && now < new Date(exam.scheduled_end).getTime();
+  return Date.now() >= new Date(exam.scheduled_start).getTime();
 }
 
 // newest first by id (scheduled_start can be anything)
@@ -286,6 +286,9 @@ function ExamList({
             >
               {exam.status}
             </p>
+            {Date.now() >= new Date(exam.scheduled_end).getTime() && exam.attempt_status !== "in_progress" && (
+              <p className="text-[11px] font-bold text-magi-destructive mt-1">{t("authPanel.overdue")}</p>
+            )}
             <p className="text-magi-muted text-xs tabular-nums mt-0.5">{formatSchedule(exam.scheduled_start, exam.scheduled_end)}</p>
           </div>
           <div className="mt-5 pt-4 border-t border-[#F2F2F2] flex justify-between items-center text-xs">
@@ -329,6 +332,11 @@ function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "l
         })}
       </p>
       {lateNote && <p className="text-xs text-magi-destructive font-medium mt-1">{lateNote}</p>}
+      {result.zeroed_for_late && (
+        <p className="text-xs text-magi-destructive font-medium mt-1">
+          {t("authPanel.zeroedForLate", { marked: result.marked_score ?? 0, max: result.exam.max_marks })}
+        </p>
+      )}
     </div>
   );
 }

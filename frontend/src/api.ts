@@ -146,6 +146,8 @@ const attemptSummarySchema = z.object({
   unlimited_time: z.boolean(),
   exam: attemptExamBriefSchema,
   score: z.number().optional(),
+  marked_score: z.number().nullish(),
+  zeroed_for_late: z.boolean().optional(),
   passed: z.boolean().optional(),
   feedback: z.string().optional(),
 });

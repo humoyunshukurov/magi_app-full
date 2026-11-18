@@ -93,7 +93,9 @@
     "examsSubtitle": "Your assigned exams and homework",
     "reload": "Reload",
     "reloadExams": "Reload exams",
-    "accountsFromProfessor": "Your account is created by your professor."
+    "accountsFromProfessor": "Your account is created by your professor.",
+    "zeroedForLate": "Your professor gave {{marked}}/{{max}}, but because it was handed in late the score was set to 0.",
+    "overdue": "Deadline passed: late work scores 0"
   },
   "preExam": {
     "beforeExamStarts": "Before the exam starts",
