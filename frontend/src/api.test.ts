@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, listExams, login, logout, signup } from "./api";
+import { ApiError, listExams, login, logout } from "./api";
 
 function mockFetchOnce(status: number, body: unknown) {
   vi.stubGlobal(
@@ -22,12 +22,6 @@ describe("api client envelope handling", () => {
     const result = await login("a@b.com", "pw");
     expect(result.token).toBe("abc");
     expect(result.user.id).toBe(1);
-  });
-
-  it("unwraps message on a successful signup response with no data field", async () => {
-    mockFetchOnce(200, { success: true, message: "User signed up successfully. Please verify your email address." });
-    const message = await signup({ first_name: "A", email: "a@b.com", password: "Test1234!" });
-    expect(message).toContain("signed up");
   });
 
   it("unwraps message on logout", async () => {

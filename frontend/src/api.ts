@@ -42,7 +42,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
   return parsed.data;
 }
 
-/** For endpoints that only ever answer `{success, message}` on success - signup, logout, … */
+/** For endpoints that only ever answer `{success, message}` on success - logout, … */
 async function requestMessage(path: string, init?: RequestInit, token?: string): Promise<string> {
   const schema = z.object({ success: z.literal(true), message: z.string().optional() });
   const envelope = await request(path, schema, init, token);
@@ -57,19 +57,6 @@ const userSummarySchema = z.object({
   role: z.string(),
 });
 export type UserSummary = z.infer<typeof userSummarySchema>;
-
-export async function signup(body: { first_name: string; last_name?: string; email: string; password: string }) {
-  return requestMessage("/api/auth/signup", {
-    method: "POST",
-    body: JSON.stringify({
-      firstName: body.first_name,
-      lastName: body.last_name,
-      email: body.email,
-      password: body.password,
-      role: "student",
-    }),
-  });
-}
 
 const loginEnvelopeSchema = z.object({
   success: z.literal(true),

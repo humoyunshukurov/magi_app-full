@@ -9,7 +9,6 @@ import {
   login,
   logout,
   me,
-  signup,
   startAttempt,
   type AttemptSummary,
   type ExamSummary,
@@ -118,38 +117,25 @@ function PasswordInput({ id, value, onChange }: { id: string; value: string; onC
   );
 }
 
+// sign in only: student accounts are made by the professor in the admin panel
 function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const fillTestAccount = () => {
     setEmail("humoyun@test.com");
     setPassword("123456");
   };
 
-  function switchMode(next: "login" | "signup") {
-    setMode(next);
-    setError(null);
-    setNotice(null);
-  }
-
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setNotice(null);
     setIsLoading(true);
     try {
-      if (mode === "signup") {
-        setNotice(await signup({ first_name: firstName, email, password }));
-      } else {
-        onSignedIn(await login(email, password));
-      }
+      onSignedIn(await login(email, password));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {
@@ -159,60 +145,21 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
 
   return (
     <div className="glass-card py-8 px-6 sm:px-10 max-w-md mx-auto">
-      <h2 className="text-2xl font-extrabold font-outfit tracking-tight text-magi-primary text-center mb-1">
-        {mode === "login" ? t("authPanel.signIn") : t("authPanel.createAccount")}
-      </h2>
-      <p className="text-center text-sm text-magi-secondary font-light mb-6">
-        {mode === "login" ? (
-          <>
-            {t("authPanel.or")}{" "}
-            <button type="button" className="font-semibold text-magi-primary hover:text-magi-hover" onClick={() => switchMode("signup")}>
-              {t("authPanel.createStudentAccount")}
-            </button>
-          </>
-        ) : (
-          <>
-            {t("authPanel.alreadyHaveOne")}{" "}
-            <button type="button" className="font-semibold text-magi-primary hover:text-magi-hover" onClick={() => switchMode("login")}>
-              {t("authPanel.signInLink")}
-            </button>
-          </>
-        )}
-      </p>
+      <h2 className="text-2xl font-extrabold font-outfit tracking-tight text-magi-primary text-center mb-1">{t("authPanel.signIn")}</h2>
+      <p className="text-center text-sm text-magi-secondary font-light mb-6">{t("authPanel.accountsFromProfessor")}</p>
 
-      {mode === "login" && (
-        <button
-          type="button"
-          onClick={fillTestAccount}
-          className="mb-4 w-full text-left p-3 rounded-[10px] bg-magi-surface border border-dashed border-magi-border hover:border-magi-primary transition-colors"
-        >
-          <p className="text-xs font-semibold text-magi-primary">{t("authPanel.testAccount")}</p>
-          <p className="text-xs text-magi-secondary font-mono mt-0.5">humoyun@test.com / 123456</p>
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={fillTestAccount}
+        className="mb-4 w-full text-left p-3 rounded-[10px] bg-magi-surface border border-dashed border-magi-border hover:border-magi-primary transition-colors"
+      >
+        <p className="text-xs font-semibold text-magi-primary">{t("authPanel.testAccount")}</p>
+        <p className="text-xs text-magi-secondary font-mono mt-0.5">humoyun@test.com / 123456</p>
+      </button>
 
       {error && <ErrorBanner message={error} />}
-      {notice && (
-        <div className="mb-4 p-4 rounded-xl bg-magi-success/10 border border-magi-success/20">
-          <p className="text-sm text-magi-success font-medium">{notice}</p>
-        </div>
-      )}
 
       <form className="space-y-4" onSubmit={(e) => void onSubmit(e)}>
-        {mode === "signup" && (
-          <div>
-            <label htmlFor="first-name" className="block text-sm font-medium text-magi-primary">
-              {t("authPanel.firstName")}
-            </label>
-            <input
-              id="first-name"
-              className={`mt-1 ${inputClass}`}
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              required
-            />
-          </div>
-        )}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-magi-primary">
             {t("authPanel.emailAddress")}
@@ -235,7 +182,7 @@ function AuthForm({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
           </div>
         </div>
         <AnimatedButton type="submit" disabled={isLoading} className={`w-full ${primaryButtonClass}`}>
-          {isLoading ? t("authPanel.pleaseWait") : mode === "login" ? t("authPanel.signIn") : t("authPanel.signUp")}
+          {isLoading ? t("authPanel.pleaseWait") : t("authPanel.signIn")}
         </AnimatedButton>
       </form>
     </div>

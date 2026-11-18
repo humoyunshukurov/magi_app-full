@@ -67,17 +67,10 @@
     "hidePassword": "Parolni berkitish",
     "showPassword": "Parolni ko'rsatish",
     "signIn": "Kirish",
-    "createAccount": "Hisob yaratish",
-    "or": "Yoki",
-    "createStudentAccount": "talaba hisobini yarating",
-    "alreadyHaveOne": "Hisobingiz bormi?",
-    "signInLink": "kiring",
     "testAccount": "Sinov hisobi",
-    "firstName": "Ism",
     "emailAddress": "Elektron pochta manzili",
     "password": "Parol",
     "pleaseWait": "Iltimos, kuting...",
-    "signUp": "Ro'yxatdan o'tish",
     "resuming": "Davom ettirilmoqda…",
     "resume": "Davom ettirish",
     "starting": "Boshlanmoqda…",
@@ -99,7 +92,8 @@
     "examsHeading": "Imtihonlar",
     "examsSubtitle": "Sizga biriktirilgan test va uyga vazifalar",
     "reload": "Yangilash",
-    "reloadExams": "Imtihonlar ro'yxatini yangilash"
+    "reloadExams": "Imtihonlar ro'yxatini yangilash",
+    "accountsFromProfessor": "Hisobingizni o'qituvchingiz yaratadi."
   },
   "preExam": {
     "beforeExamStarts": "Imtihon boshlanishidan oldin",

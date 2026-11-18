@@ -67,17 +67,10 @@
     "hidePassword": "Hide password",
     "showPassword": "Show password",
     "signIn": "Sign In",
-    "createAccount": "Create Account",
-    "or": "Or",
-    "createStudentAccount": "create a student account",
-    "alreadyHaveOne": "Already have one?",
-    "signInLink": "sign in",
     "testAccount": "Test account",
-    "firstName": "First name",
     "emailAddress": "Email Address",
     "password": "Password",
     "pleaseWait": "Please wait...",
-    "signUp": "Sign Up",
     "resuming": "Resuming…",
     "resume": "Resume",
     "starting": "Starting…",
@@ -99,7 +92,8 @@
     "examsHeading": "Exams",
     "examsSubtitle": "Your assigned exams and homework",
     "reload": "Reload",
-    "reloadExams": "Reload exams"
+    "reloadExams": "Reload exams",
+    "accountsFromProfessor": "Your account is created by your professor."
   },
   "preExam": {
     "beforeExamStarts": "Before the exam starts",

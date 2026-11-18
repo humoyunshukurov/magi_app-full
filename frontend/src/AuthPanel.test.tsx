@@ -320,30 +320,10 @@ describe("AuthPanel", () => {
     });
   });
 
-  describe("switching between sign in and create account", () => {
-    it("clears a login error when switching to create account", async () => {
-      queueFetch([{ status: 400, body: { success: false, message: "Invalid email or password" } }]);
-      render(<AuthPanel />);
-      signIn();
-      await screen.findByText("Invalid email or password");
-
-      fireEvent.click(screen.getByRole("button", { name: "create a student account" }));
-      expect(screen.queryByText("Invalid email or password")).toBeNull();
-    });
-
-    it("clears a signup notice when switching back to sign in", async () => {
-      queueFetch([{ status: 200, body: { success: true, message: "Check your email to verify your account" } }]);
-      render(<AuthPanel />);
-      fireEvent.click(screen.getByRole("button", { name: "create a student account" }));
-      fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Curl" } });
-      fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "s@example.com" } });
-      fireEvent.change(screen.getByLabelText("Password"), { target: { value: "Test1234!" } });
-      fireEvent.click(screen.getByRole("button", { name: "Sign Up" }));
-      await screen.findByText("Check your email to verify your account");
-
-      fireEvent.click(screen.getByRole("button", { name: "sign in" }));
-      expect(screen.queryByText("Check your email to verify your account")).toBeNull();
-    });
+  it("has no way to create an account, only to sign in", () => {
+    render(<AuthPanel />);
+    expect(screen.queryByRole("button", { name: /create/i })).toBeNull();
+    expect(screen.queryByLabelText("First name")).toBeNull();
   });
 
   describe("the check before the exam", () => {
