@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import i18next from "./i18n";
-import { checkIdentity, getMyIdNumber } from "./api";
+import { checkIdentity, getMyIds } from "./api";
 import { loadDetector } from "./cameraWatch";
 import type { EnvironmentReport } from "./generated/EnvironmentReport";
 import { environmentCheck, screenshotTake } from "./ipc";
@@ -149,20 +149,19 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
   const [noFace, setNoFace] = useState(false);
   const [idMismatch, setIdMismatch] = useState(false);
   const detector = useRef<Awaited<ReturnType<typeof loadDetector>> | null>(null);
-  // undefined = loading, null = no ID number on this account (skip the check)
-  const realIdNumber = useRef<string | null | undefined>(undefined);
+  const [idCheckFailed, setIdCheckFailed] = useState(false);
+  // the account's own IDs, null until they're loaded
+  const realIds = useRef<string[] | null>(null);
   // wait for it, otherwise a fast click skipped the check
   const [idNumberLoaded, setIdNumberLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    getMyIdNumber(token).then(
-      (value) => {
-        if (!cancelled) realIdNumber.current = value;
+    getMyIds(token).then(
+      (ids) => {
+        if (!cancelled) realIds.current = ids;
       },
-      () => {
-        if (!cancelled) realIdNumber.current = null;
-      },
+      () => undefined,
     ).finally(() => {
       if (!cancelled) setIdNumberLoaded(true);
     });
@@ -203,7 +202,11 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
   // no camera = nothing to compare
   const start = async () => {
     setIdMismatch(false);
-    if (realIdNumber.current && id.toLowerCase() !== realIdNumber.current.trim().toLowerCase()) {
+    setIdCheckFailed(false);
+    // couldn't load them before, one more try - no way in without the ID being checked
+    if (realIds.current === null) realIds.current = await getMyIds(token).catch(() => null);
+    if (realIds.current === null) return setIdCheckFailed(true);
+    if (realIds.current.length > 0 && !realIds.current.includes(id.toLowerCase())) {
       setIdMismatch(true);
       return;
     }
@@ -264,6 +267,11 @@ function Identity({ token, onReady, onCancel }: { token: string; onReady: (check
             <p className="text-sm font-bold text-magi-destructive">{t("preExam.idMismatchTitle")}</p>
             <p className="text-xs text-magi-destructive mt-1">{t("preExam.idMismatchDetail")}</p>
           </div>
+        )}
+        {idCheckFailed && (
+          <p role="alert" className="text-xs text-magi-destructive">
+            {t("preExam.idCheckFailed")}
+          </p>
         )}
         {noFace && (
           <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-200 text-left">

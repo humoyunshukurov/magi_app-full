@@ -1,14 +1,14 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PreExam, RECHECK_MS } from "./PreExam";
-import { checkIdentity, getMyIdNumber } from "./api";
+import { checkIdentity, getMyIds } from "./api";
 import { loadDetector } from "./cameraWatch";
 import { environmentCheck, screenshotTake } from "./ipc";
 import { useCamera } from "./useCamera";
 import { isUpdating } from "./updateState";
 
 vi.mock("./ipc", () => ({ environmentCheck: vi.fn(), screenshotTake: vi.fn() }));
-vi.mock("./api", () => ({ checkIdentity: vi.fn(), getMyIdNumber: vi.fn() }));
+vi.mock("./api", () => ({ checkIdentity: vi.fn(), getMyIds: vi.fn() }));
 vi.mock("./cameraWatch", () => ({ loadDetector: vi.fn() }));
 vi.mock("./updateState", () => ({ isUpdating: vi.fn(() => false) }));
 vi.mock("./useCamera", async () => {
@@ -35,7 +35,7 @@ function open(withPhotos = true) {
   return { onReady, onCancel };
 }
 
-const typeId = (value: string) => fireEvent.change(screen.getByLabelText("ID number"), { target: { value } });
+const typeId = (value: string) => fireEvent.change(screen.getByLabelText("Student ID"), { target: { value } });
 const startButton = () => screen.getByRole("button", { name: "Take the photo and start the exam" }) as HTMLButtonElement;
 
 beforeEach(() => {
@@ -51,8 +51,8 @@ beforeEach(() => {
   });
   // no reference photo by default
   vi.mocked(checkIdentity).mockResolvedValue({ success: true, hasReference: false, matched: true, outcome: "no_reference" });
-  // no ID number by default, so any typed one goes through
-  vi.mocked(getMyIdNumber).mockResolvedValue(null);
+  // no IDs by default, so any typed one goes through
+  vi.mocked(getMyIds).mockResolvedValue([]);
   vi.mocked(isUpdating).mockReturnValue(false);
 });
 
@@ -359,7 +359,7 @@ describe("PreExam, the ID number check", () => {
   }
 
   it("refuses to proceed when the typed ID doesn't match the one on the account", async () => {
-    vi.mocked(getMyIdNumber).mockResolvedValue("AB1234567");
+    vi.mocked(getMyIds).mockResolvedValue(["ab1234567"]);
     const { onReady } = await ready();
     typeId("WRONG-ID");
     fireEvent.click(startButton());
@@ -371,7 +371,7 @@ describe("PreExam, the ID number check", () => {
   });
 
   it("proceeds when the typed ID matches, regardless of case or surrounding spaces", async () => {
-    vi.mocked(getMyIdNumber).mockResolvedValue("AB1234567");
+    vi.mocked(getMyIds).mockResolvedValue(["ab1234567"]);
     const { onReady } = await ready();
     typeId("  ab1234567  ");
     fireEvent.click(startButton());
@@ -380,8 +380,18 @@ describe("PreExam, the ID number check", () => {
     expect(onReady).toHaveBeenCalled();
   });
 
-  it("doesn't check at all when the account has no ID number assigned", async () => {
-    vi.mocked(getMyIdNumber).mockResolvedValue(null);
+  it("lets the student in with the Student ID they were given, as well as their ID number", async () => {
+    vi.mocked(getMyIds).mockResolvedValue(["58971", "ab1234567"]);
+    const { onReady } = await ready();
+    typeId("58971");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).toHaveBeenCalled();
+  });
+
+  it("doesn't check at all when the account has no ID assigned", async () => {
+    vi.mocked(getMyIds).mockResolvedValue([]);
     const { onReady } = await ready();
     typeId("ANYTHING");
     fireEvent.click(startButton());
@@ -390,10 +400,21 @@ describe("PreExam, the ID number check", () => {
     expect(onReady).toHaveBeenCalled();
   });
 
-  it("doesn't block the student when fetching their ID number fails", async () => {
-    vi.mocked(getMyIdNumber).mockRejectedValue(new Error("network down"));
+  it("won't start when their ID can't be checked, and says so", async () => {
+    vi.mocked(getMyIds).mockRejectedValue(new Error("network down"));
     const { onReady } = await ready();
     typeId("ANYTHING");
+    fireEvent.click(startButton());
+    await flush();
+
+    expect(onReady).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("Couldn't check your ID");
+  });
+
+  it("tries loading the ID again on Start if it failed the first time", async () => {
+    vi.mocked(getMyIds).mockRejectedValueOnce(new Error("network down")).mockResolvedValueOnce(["58971"]);
+    const { onReady } = await ready();
+    typeId("58971");
     fireEvent.click(startButton());
     await flush();
 
@@ -401,8 +422,8 @@ describe("PreExam, the ID number check", () => {
   });
 
   it("doesn't let the student start before their real ID number has finished loading", async () => {
-    let resolveIdNumber: ((value: string | null) => void) | undefined;
-    vi.mocked(getMyIdNumber).mockReturnValue(
+    let resolveIdNumber: ((value: string[]) => void) | undefined;
+    vi.mocked(getMyIds).mockReturnValue(
       new Promise((resolve) => {
         resolveIdNumber = resolve;
       }),
@@ -411,7 +432,7 @@ describe("PreExam, the ID number check", () => {
     typeId("WRONG-ID");
     expect(startButton().disabled).toBe(true);
 
-    resolveIdNumber?.("AB1234567");
+    resolveIdNumber?.(["ab1234567"]);
     await flush();
     expect(startButton().disabled).toBe(false);
     fireEvent.click(startButton());
@@ -421,7 +442,7 @@ describe("PreExam, the ID number check", () => {
   });
 
   it("lets the student try again after an ID mismatch", async () => {
-    vi.mocked(getMyIdNumber).mockResolvedValue("AB1234567");
+    vi.mocked(getMyIds).mockResolvedValue(["ab1234567"]);
     const { onReady } = await ready();
     typeId("WRONG-ID");
     fireEvent.click(startButton());

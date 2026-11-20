@@ -86,12 +86,15 @@ export async function me(token: string) {
 
 const myProfileSchema = z.object({
   success: z.literal(true),
-  profile: z.object({ id_number: z.string().nullable() }),
+  profile: z.object({ student_code: z.string().nullish(), id_number: z.string().nullish() }),
 });
 
-export async function getMyIdNumber(token: string) {
+/** The IDs the student may type before an exam: the Student ID they were given, or their ID number. */
+export async function getMyIds(token: string) {
   const envelope = await request("/api/auth/me/profile", myProfileSchema, { method: "GET" }, token);
-  return envelope.profile.id_number;
+  return [envelope.profile.student_code, envelope.profile.id_number]
+    .map((value) => value?.trim().toLowerCase() ?? "")
+    .filter((value) => value !== "");
 }
 
 const examStatusSchema = z.enum(["demo", "scheduled", "ongoing", "completed", "delayed", "cancelled"]);
