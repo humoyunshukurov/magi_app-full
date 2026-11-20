@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AttemptSession, SYNC_IDLE_MS, type AttemptView } from "./AttemptSession";
 import { syncAnswers, submitAttempt, getAttempt } from "./api";
 import { activityLog, appQuit, cameraStart, draftClear, draftLoad, draftSave, environmentCheck, examLock, linkClose, linkOpen, onCloseAttempt, onLinkBlocked, onLinkClosed, onLinkFocus, onWindowFocusChanged, screenshotTake } from "./ipc";
-import { LINK_GRACE_MS, POLL_MS, QUIT_DELAY_MS, SHOT_DELAY_MS, SHOT_GAP_MS, SHOT_LIMIT } from "./useExamGuard";
+import { LINK_GRACE_MS, POLL_MS, QUIT_DELAY_MS, SHOT_DELAY_MS, SHOT_GAP_MS, SHOT_LIMIT, guardChecks } from "./useExamGuard";
 
 vi.mock("./cameraWatch", async (importOriginal) => ({ ...(await importOriginal<typeof import("./cameraWatch")>()), loadDetector: () => new Promise(() => {}) }));
 vi.mock("./useMicrophone", () => ({ useMicrophone: () => ({ problem: null, isSpeaking: () => false }) }));
@@ -96,6 +96,8 @@ const focusWindow = () => act(() => win.focusChanged?.(true));
 const cameraTrack = { label: "Integrated Camera", stop: vi.fn(), addEventListener: vi.fn() };
 
 beforeEach(() => {
+  // the window/screen checks are paused in the app for now, these tests cover them switched on
+  guardChecks.windowAndScreen = true;
   vi.useFakeTimers();
   Object.defineProperty(navigator, "mediaDevices", {
     value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [cameraTrack], getVideoTracks: () => [cameraTrack] }) },
@@ -255,7 +257,7 @@ describe("AttemptSession", () => {
 
     expect(syncAnswers).toHaveBeenCalledWith("tok", 77, [expect.objectContaining({ answer: "<p>final</p>" })]);
     expect(submitAttempt).toHaveBeenCalledWith("tok", 77, expect.any(Array));
-    expect(onFinished).toHaveBeenCalledWith(finished, undefined);
+    expect(onFinished).toHaveBeenCalledWith(finished);
     expect(draftClear).toHaveBeenCalledWith(77);
   });
 
@@ -288,7 +290,7 @@ describe("AttemptSession", () => {
     await flush();
 
     expect(getAttempt).toHaveBeenCalledWith("tok", 77);
-    expect(onFinished).toHaveBeenCalledWith(finished, undefined);
+    expect(onFinished).toHaveBeenCalledWith(finished);
     expect(draftClear).toHaveBeenCalledWith(77);
     expect(screen.queryByText(/network blip/)).toBeNull();
   });
@@ -552,7 +554,7 @@ describe("AttemptSession", () => {
       ]);
     });
 
-    it("ends the exam automatically the moment the student leaves the window", async () => {
+    it("only writes it down when the student leaves the window - the exam keeps going", async () => {
       const onFinished = renderSession();
       await flush();
 
@@ -561,14 +563,26 @@ describe("AttemptSession", () => {
       await flush();
 
       expect(logged("window_left")).toHaveLength(1);
-      expect(submitAttempt).toHaveBeenCalledWith("tok", 77, expect.any(Array));
-      expect(logged("auto_submitted")[0]).toMatchObject({
-        detail: "Left the exam window - the attempt was submitted automatically and the exam ended",
-      });
-      expect(onFinished).toHaveBeenCalledWith(finished, "left_window");
+      expect(submitAttempt).not.toHaveBeenCalled();
+      expect(onFinished).not.toHaveBeenCalled();
     });
 
-    it("still records coming back, even though leaving already ended the attempt", async () => {
+    it("notices neither leaving the window nor extra screens while those checks are paused", async () => {
+      guardChecks.windowAndScreen = false;
+      vi.mocked(environmentCheck).mockResolvedValue({ ...oneScreen, monitor_count: 2, forbidden_apps: ["Discord"] });
+      renderSession();
+      await flush();
+
+      blur();
+      await flush();
+
+      expect(logged("window_left")).toHaveLength(0);
+      expect(logged("monitor_added")).toHaveLength(0);
+      expect(logged("app_detected")).toHaveLength(0);
+      expect(screenshotTake).not.toHaveBeenCalled();
+    });
+
+    it("records coming back to the window", async () => {
       renderSession();
       await flush();
 

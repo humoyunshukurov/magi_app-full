@@ -308,12 +308,11 @@ function formatLate(seconds: number): string {
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
-function AttemptResult({ result, reason }: { result: AttemptSummary; reason?: "left_window" }) {
+function AttemptResult({ result }: { result: AttemptSummary }) {
   const { t } = useTranslation();
   const lateNote = result.late_seconds > 0 ? t("authPanel.lateBy", { time: formatLate(result.late_seconds) }) : null;
-  // auto_submitted is always false now, reason is what tells us they left the window
   if (result.status !== "graded") {
-    const message = reason === "left_window" ? t("authPanel.leftWindowSubmitted") : t("authPanel.answersSubmitted");
+    const message = t("authPanel.answersSubmitted");
     return (
       <div className="glass-card p-5">
         <p className="text-sm font-semibold text-magi-primary">{message}</p>
@@ -356,7 +355,6 @@ export function AuthPanel({
   const [exams, setExams] = useState<ExamSummary[] | null>(null);
   const [attempt, setAttempt] = useState<AttemptView | null>(null);
   const [result, setResult] = useState<AttemptSummary | null>(null);
-  const [resultReason, setResultReason] = useState<"left_window" | undefined>(undefined);
   const [startingId, setStartingId] = useState<number | null>(null);
   const [resumed, setResumed] = useState(false);
   const [checking, setChecking] = useState<{ examId: number; resumes: boolean } | null>(null);
@@ -437,7 +435,6 @@ export function AuthPanel({
     setExams(null);
     setAttempt(null);
     setResult(null);
-    setResultReason(undefined);
   }
 
   async function reloadExams() {
@@ -473,8 +470,7 @@ export function AuthPanel({
       setResumed(resumes);
       setCheckIn(checkedIn);
       setResult(null);
-      setResultReason(undefined);
-    } catch (err) {
+      } catch (err) {
       await examLock(false).catch(() => undefined);
       setError(err instanceof ApiError ? err.message : String(err));
       // the list may be out of date (the attempt ended in the meantime)
@@ -517,7 +513,7 @@ export function AuthPanel({
       {error && <ErrorBanner message={error} />}
       {result && (
         <div className="mb-4">
-          <AttemptResult result={result} reason={resultReason} />
+          <AttemptResult result={result} />
         </div>
       )}
 
@@ -536,9 +532,8 @@ export function AuthPanel({
           attempt={attempt}
           resumed={resumed}
           checkIn={checkIn ?? undefined}
-          onFinished={(finished, reason) => {
+          onFinished={(finished) => {
             setResult(finished);
-            setResultReason(reason);
             setAttempt(null);
             listExams(session.token).then(setExams, () => undefined);
           }}

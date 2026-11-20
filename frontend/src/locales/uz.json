@@ -80,7 +80,6 @@
     "examLabel": "Imtihon",
     "marksPassAt": "{{max}} ball, o'tish balli {{passing}}",
     "answersSubmitted": "Javoblaringiz topshirildi.",
-    "leftWindowSubmitted": "Siz imtihon oynasidan chiqib ketdingiz, shuning uchun urinish avtomatik topshirildi va imtihon tugadi.",
     "lateBy": "Siz {{time}} kech topshirdingiz.",
     "gradedSoon": "Tez orada baholanadi.",
     "gradedResult": "Baholandi: {{score}} / {{max}} - {{status}}",

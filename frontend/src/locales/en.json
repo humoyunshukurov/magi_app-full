@@ -80,7 +80,6 @@
     "examLabel": "Exam",
     "marksPassAt": "{{max}} marks, pass at {{passing}}",
     "answersSubmitted": "Your answers were submitted.",
-    "leftWindowSubmitted": "You left the exam window, so the attempt was submitted automatically and the exam ended.",
     "lateBy": "You submitted {{time}} late.",
     "gradedSoon": "They will be graded soon.",
     "gradedResult": "Graded: {{score}} / {{max}} - {{status}}",

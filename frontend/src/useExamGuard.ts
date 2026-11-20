@@ -28,13 +28,15 @@ function developerToolsKey(e: KeyboardEvent): string | null {
 
 const names = (list: string[]) => list.join(", ");
 
+// window leaving and screen/app checks are off for now while the app is being tested
+export const guardChecks = { windowAndScreen: false };
+
 export function useExamGuard({
   enabled,
   log,
   where,
   questionId,
   permittedUrls,
-  onLeave,
 }: {
   enabled: boolean;
   log: GuardLog;
@@ -43,10 +45,9 @@ export function useExamGuard({
   questionId: () => number | undefined;
   permittedUrls: string[];
   /** Called the moment the student actually leaves (not for a permitted link) - ends the exam. */
-  onLeave: () => void;
 }) {
-  const latest = useRef({ log, where, questionId, permittedUrls, onLeave });
-  latest.current = { log, where, questionId, permittedUrls, onLeave };
+  const latest = useRef({ log, where, questionId, permittedUrls });
+  latest.current = { log, where, questionId, permittedUrls };
   // shared between the focus watching below and openLink
   const focus = useRef({ main: true, link: false, linkFocused: false, leftAt: null as number | null, linkOpenedAt: null as number | null });
   const settleFocus = useRef<() => void>(() => undefined);
@@ -133,12 +134,12 @@ export function useExamGuard({
       latest.current.log(kind, detail, { questionId: latest.current.questionId(), data });
 
     const evaluate = () => {
+      if (!guardChecks.windowAndScreen) return;
       const away = !f.main && !(f.link && f.linkFocused);
       if (away && f.leftAt === null) {
         f.leftAt = Date.now();
         note("window_left", `Left the exam window while on ${latest.current.where()}`);
         void shoot.current("Screenshot after leaving the exam window", "window_left", SHOT_DELAY_MS);
-        latest.current.onLeave();
       } else if (!away && f.leftAt !== null) {
         const seconds = Math.round((Date.now() - f.leftAt) / 1000);
         f.leftAt = null;
@@ -193,7 +194,7 @@ export function useExamGuard({
 
   // Screens and apps are read when the exam opens and again every few seconds.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !guardChecks.windowAndScreen) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let before: Awaited<ReturnType<typeof environmentCheck>> | null = null;

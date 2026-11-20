@@ -137,7 +137,7 @@ export function AttemptSession({
   resumed?: boolean;
   /** Photos and notes from the check before the exam, written to the log once the exam is open. */
   checkIn?: CheckIn;
-  onFinished: (result: AttemptSummary, reason?: "left_window") => void;
+  onFinished: (result: AttemptSummary) => void;
 }) {
   const { t } = useTranslation();
   const questions = [...attempt.questions].sort((a, b) => a.position - b.position);
@@ -326,15 +326,14 @@ export function AttemptSession({
     rerender();
   };
 
-  const finish = (result: AttemptSummary, reason?: "left_window") => {
+  const finish = (result: AttemptSummary) => {
     finished.current = true;
     clearTimeout(syncTimer.current);
     draftClear(attempt.id).catch(() => undefined);
-    onFinished(result, reason);
+    onFinished(result);
   };
 
-  // auto = left the window
-  const submit = async (auto: boolean) => {
+  const submit = async () => {
     if (finished.current || submitInFlight.current) return;
     submitInFlight.current = true;
     setSubmitting(true);
@@ -346,7 +345,7 @@ export function AttemptSession({
     timeline.current.push({ t: Math.round((Date.now() - timelineStart.current) / 1000), chars: totalTyped() });
 
     const saved = await syncNow();
-    if (!saved && !auto) {
+    if (!saved) {
       submitInFlight.current = false;
       setSubmitting(false);
       setError(t("attemptSession.couldNotSave"));
@@ -361,21 +360,18 @@ export function AttemptSession({
       marks_answered: answeredQuestions.reduce((sum, qq) => sum + qq.marks, 0),
       marks_total: questions.reduce((sum, qq) => sum + qq.marks, 0),
     };
-    const logSubmitted = () =>
-      auto
-        ? log("auto_submitted", "Left the exam window - the attempt was submitted automatically and the exam ended", { data: completion })
-        : log("attempt_submitted", "The student submitted the attempt", { data: completion });
+    const logSubmitted = () => log("attempt_submitted", "The student submitted the attempt", { data: completion });
     try {
       const result = (await submitAttempt(token, attempt.id, timeline.current)).attempt;
       logSubmitted();
-      finish(result, auto ? "left_window" : undefined);
+      finish(result);
     } catch (err) {
       // the submit may have gone through and only the response got lost - check before showing an error
       try {
         const result = await getAttempt(token, attempt.id);
         if (DONE_STATUSES.has(result.status)) {
           logSubmitted();
-          finish(result, auto ? "left_window" : undefined);
+          finish(result);
           return;
         }
       } catch {
@@ -473,8 +469,6 @@ export function AttemptSession({
     where: whereNow,
     questionId: () => currentId.current ?? undefined,
     permittedUrls: attempt.permitted_urls.map((u) => u.url),
-    // Leaving isn't just logged - it ends the exam.
-    onLeave: () => void submit(true),
   });
 
   if (!ready) {
@@ -662,7 +656,7 @@ export function AttemptSession({
           {t("attemptSession.previous")}
         </button>
         {index === questions.length - 1 ? (
-          <AnimatedButton disabled={submitting} onClick={() => void submit(false)} className={primaryButtonClass}>
+          <AnimatedButton disabled={submitting} onClick={() => void submit()} className={primaryButtonClass}>
             {submitting ? t("attemptSession.submitting") : t("attemptSession.submitAttempt")}
           </AnimatedButton>
         ) : (
